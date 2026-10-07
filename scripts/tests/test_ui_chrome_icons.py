@@ -21,7 +21,10 @@ def arrays(text):
 class UiChromeIconTest(unittest.TestCase):
     def test_native_dimensions_and_white_padding(self):
         data = arrays(HEADER.read_text())
-        self.assertEqual(len(data), 11)
+        # 10 arrays since ddd6e1d5 collapsed the tab bar from 5 tabs to 3: the
+        # statistics and apps tab glyphs went away with their tabs. The 4-cell
+        # PaperRead bar reuses the home/recent/library/settings glyphs.
+        self.assertEqual(len(data), 10)
         for name, bits in data.items():
             size = 56 if name.endswith('_56_bits') else 48 if name.endswith('_48_bits') else 32 if name.endswith('_32_bits') else 24 if name.endswith('_24_bits') else None
             self.assertEqual(len(bits), size * ((size + 7) // 8) if size else 80)
@@ -53,27 +56,74 @@ class UiChromeIconTest(unittest.TestCase):
                 subprocess.run(command, check=True)
                 self.assertEqual(first, output.read_bytes())
 
-    def test_tab_pixels_use_target_bitmap_without_resampling(self):
+    def test_tab_glyphs_are_drawn_at_their_native_bitmap_size(self):
+        """Guard the one invariant the old drawInxIcon() test protected.
+
+        GfxRenderer::drawIcon() derives its row stride from `size`
+        (rowBytes = (size + 7) / 8), so a tab glyph handed anything other than
+        its native size reads the wrong bytes and paints vertical noise. The
+        4-tab bar now routes through InxTheme::drawMainTabBar(), so assert the
+        size it hands to drawIcon() equals the asset's own w/h for every cell."""
         source = (ROOT / 'src/components/themes/inx/InxTheme.cpp').read_text()
+        icon_size = source[source.index('constexpr int kIconSize'):]
+        icon_size = icon_size[:icon_size.index(';') + 1]
         run_cpp(r'''
+#include <algorithm>
 #include <cassert>
+#include <cstdint>
 #include <initializer_list>
 #include "Icon.h"
+#include "activities/MainTab.h"
+#include "components/icons/inx_tabs.h"
 #include "components/icons/uiChromeIcons.h"
+
+constexpr int UI_12_FONT_ID = 12, SMALL_FONT_ID = 8;
+enum { STR_TAB_HOME, STR_TAB_RECENT, STR_LIBRARY, STR_SETTINGS_TITLE };
+const char* tr(int id) {
+  static const char* names[] = {"home", "recent", "library", "settings"};
+  return names[id];
+}
+
 struct GfxRenderer {
- mutable bool pixels[56][56]{};
- void drawPixel(int x,int y,bool ink) const { assert(x>=0 && x<56 && y>=0 && y<56); pixels[y][x]=ink; }
+  struct ClipScope { ClipScope(const GfxRenderer&, int, int, int, int) {} };
+  mutable const uint8_t* drawn[8]{};
+  mutable int drawnSize[8]{};
+  mutable bool drawnInverted[8]{};
+  mutable int calls = 0;
+  void fillRect(int, int, int, int, bool) const {}
+  void drawLine(int, int, int, int, bool) const {}
+  void drawText(int, int, int, const char*, bool) const {}
+  int getLineHeight(int) const { return 45; }
+  int getTextWidth(int, const char*) const { return 40; }
+  void drawIcon(const uint8_t* bits, int, int, int size) const { record(bits, size, false); }
+  void drawIconInverted(const uint8_t* bits, int, int, int size) const { record(bits, size, true); }
+  void record(const uint8_t* bits, int size, bool inverted) const {
+    drawn[calls] = bits; drawnSize[calls] = size; drawnInverted[calls] = inverted; ++calls;
+  }
 };
-constexpr int kIconSize=56;
-''' + method(source, 'void drawInxIcon(') + r'''
+
+struct InxTheme {
+  void drawMainTabBar(const GfxRenderer&, const Rect, const MainTab) const;
+};
+
+''' + icon_size + '\n' + method(source, 'const char* tabLabel(') + method(source, 'const uint8_t* iconForTab(')
+            + method(source, 'void InxTheme::drawMainTabBar(') + r'''
 int main() {
- for (auto bits : {icon_tab_recent_56.bits,icon_tab_library_56.bits,
-                   icon_tab_settings_56.bits,icon_tab_statistics_56.bits,
-                   icon_tab_apps_56.bits}) {
-   GfxRenderer r; drawInxIcon(r,bits,0,0);
-   for (int y=0;y<56;++y) for(int x=0;x<56;++x)
-     assert(r.pixels[y][x]==((bits[y*7+x/8]&(0x80U>>(x%8)))==0));
- }
+  const freeink::Icon* expected[] = {&icon_home_56, &icon_recent_56, &icon_library_56, &icon_settings_56};
+  for (int selected = 0; selected < static_cast<int>(MainTabs::values.size()); ++selected) {
+    GfxRenderer r;
+    InxTheme{}.drawMainTabBar(r, Rect{0, 1112, 684, 96}, MainTabs::values[selected]);
+    assert(r.calls == static_cast<int>(MainTabs::values.size()));
+    for (int index = 0; index < r.calls; ++index) {
+      // The size handed to drawIcon() must equal the asset's native height...
+      assert(expected[index]->h == 56 && expected[index]->w == 56);
+      assert(r.drawnSize[index] == expected[index]->h);
+      // ...and the cell must draw its own asset, not a rescaled sibling.
+      assert(r.drawn[index] == expected[index]->bits);
+      // Only the selected cell inverts.
+      assert(r.drawnInverted[index] == (index == selected));
+    }
+  }
 }
 ''', include_dirs=(ROOT / 'src', ROOT / 'freeink-sdk/libs/assets/Icons/include'),
                 defines=('CROSSMUX_UI_PROFILE_HIGH_DPI',))

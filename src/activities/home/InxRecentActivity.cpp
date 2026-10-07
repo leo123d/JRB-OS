@@ -16,6 +16,9 @@
 #include "components/UITheme.h"
 #include "components/icons/cover.h"
 #include "components/themes/inx/InxTheme.h"
+#if FREEINK_DEVICE_READPICO
+#include "components/themes/paperread/PaperReadUi.h"
+#endif
 #include "fontIds.h"
 #include "util/BookCoverLoader.h"
 #include "util/ReadingStatsAnalytics.h"
@@ -537,6 +540,59 @@ void InxRecentActivity::drawCover(const Rect& content) {
 
 void InxRecentActivity::render(RenderLock&&) {
   renderer.clearScreen();
+#if FREEINK_DEVICE_READPICO
+  // PaperRead spec S-2: header (back + 21px title), a 96px-row list of recent
+  // books, and the shared bottom tab bar with "Recent" selected. The tab bar
+  // itself is painted by the shared chrome after the page body renders.
+  PaperReadUi::drawHeader(renderer, tr(STR_TAB_RECENT));
+
+  const int count = books ? static_cast<int>(books->size()) : 0;
+  const int rowTop = PaperReadUi::kBodyTop;
+  const int rowBottom = PaperReadUi::kBodyBottom;
+  constexpr int kRowHeight = 96;
+  const int maxRows = std::max(0, (rowBottom - rowTop) / kRowHeight);
+
+  if (count == 0) {
+    const int textWidth = renderer.getTextWidth(NOTOSERIF_12_FONT_ID, tr(STR_NO_RECENT_BOOKS));
+    renderer.drawText(NOTOSERIF_12_FONT_ID, (PaperReadUi::kScreenWidth - textWidth) / 2, rowTop + 60,
+                      tr(STR_NO_RECENT_BOOKS), true);
+  } else {
+    // Selection highlight: a solid inverted row block (spec R-4).
+    if (showMainTabContentSelection() && selected >= 0 && selected < count && selected < maxRows) {
+      renderer.fillRect(0, rowTop + selected * kRowHeight, PaperReadUi::kScreenWidth, kRowHeight, true);
+    }
+    for (int slot = 0; slot < maxRows && slot < count; ++slot) {
+      const RecentBook& book = (*books)[slot];
+      const ReadingBookStats* stats = statsAt(slot);
+      const uint8_t percent = progressOf(stats);
+      char trailing[24];
+      if (stats != nullptr && stats->completed) {
+        std::snprintf(trailing, sizeof(trailing), "%s", tr(STR_BOOK_FINISHED_SHORT));
+      } else {
+        std::snprintf(trailing, sizeof(trailing), "%u%%", static_cast<unsigned>(percent));
+      }
+      const bool invert = showMainTabContentSelection() && slot == selected;
+      const char* title = titleOf(book);
+      const char* author = book.author.empty() ? tr(STR_LIBRARY_UNKNOWN_AUTHOR) : book.author.c_str();
+      const int rowY = rowTop + slot * kRowHeight;
+      const int titleY = rowY + 16;
+      const int authorY = titleY + 34;
+      renderer.drawText(NOTOSERIF_14_FONT_ID, PaperReadUi::kSideMargin, titleY, title, !invert);
+      renderer.drawText(NOTOSERIF_12_FONT_ID, PaperReadUi::kSideMargin, authorY, author, !invert);
+      const int trailingWidth = renderer.getTextWidth(NOTOSERIF_12_FONT_ID, trailing);
+      renderer.drawText(NOTOSERIF_12_FONT_ID, PaperReadUi::kScreenWidth - PaperReadUi::kSideMargin - trailingWidth,
+                        titleY, trailing, !invert);
+      if (slot + 1 < count && slot + 1 < maxRows) {
+        renderer.drawLine(PaperReadUi::kSideMargin, rowY + kRowHeight - 1,
+                          PaperReadUi::kScreenWidth - PaperReadUi::kSideMargin - 1, rowY + kRowHeight - 1, false);
+      }
+    }
+  }
+
+  GUI.drawMainTabBar(renderer, mainTabLayout().tabBar, MainTab::Recent);
+  renderer.displayBuffer();
+  return;
+#else
   const auto& metrics = UITheme::getInstance().getMetrics();
   const int width = renderer.getScreenWidth();
   const Rect safeArea = UITheme::getInstance().getScreenSafeArea(renderer, false, false);
@@ -587,4 +643,5 @@ void InxRecentActivity::render(RenderLock&&) {
   }
   if (prepareNextMissingCover()) return;
   renderer.displayBuffer();
+#endif
 }

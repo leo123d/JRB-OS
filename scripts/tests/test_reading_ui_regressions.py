@@ -1,4 +1,9 @@
-"""Run production home geometry, headers, resource errors and sync refresh with small seams."""
+"""Run production home geometry, headers and reader UI seams under a host build.
+
+The AirPage / WeRead / app-suite cases were dropped together with the apps
+themselves; what remains covers the PaperRead tab bar, headers and the reader
+shell that the firmware still ships.
+"""
 from pathlib import Path
 import importlib.util
 import json
@@ -8,7 +13,6 @@ import tempfile
 import unittest
 
 ROOT = Path(__file__).resolve().parents[2]
-WEREAD = ROOT / 'src/activities/apps/weread/webapi'
 
 
 def method(source, name):
@@ -114,6 +118,7 @@ int main() {
 #include "activities/MainTab.h"
 #include "InxItemLayout.h"
 int main() {
+  constexpr int kTabCount = static_cast<int>(MainTabs::values.size());
   for (const Rect safe : {Rect{5,5,674,1203}, Rect{5,8,1203,674},
                          Rect{5,8,674,1203}, Rect{8,5,1203,674},
                          Rect{5,5,590,987}, Rect{5,8,987,590},
@@ -126,12 +131,17 @@ int main() {
         assert(layout.content.y-layout.statusBar.y-layout.statusBar.height>=12);
         assert(layout.tabBar.y-layout.content.y-layout.content.height>=12);
       } else assert(layout.content.y>=layout.tabBar.y+layout.tabBar.height);
-      for (int tab=0;tab<5;++tab) {
+      for (int tab=0;tab<kTabCount;++tab) {
         auto bounds=MainTabs::tabBounds(tab,safe.width);
         assert(bounds.right-bounds.left>=96);
         assert(MainTabs::fromX((bounds.left+bounds.right)/2,safe.width)==MainTabs::values[tab]);
-        assert(MainTabs::fromX(bounds.right,safe.width)==MainTab::None);
-        if (tab<4) assert(MainTabs::tabBounds(tab+1,safe.width).left-bounds.right>=6);
+        assert(MainTabs::fromX(bounds.right-1,safe.width)==MainTabs::values[tab]);
+        // Spec S-1.9: the cells tile the bar edge to edge, so the pixel just
+        // past a cell belongs to the next cell (and past the last one to
+        // nothing). There is no inter-cell gutter and no dead hit region.
+        assert(MainTabs::fromX(bounds.right,safe.width)==
+               (tab+1<kTabCount?MainTabs::values[tab+1]:MainTab::None));
+        if (tab+1<kTabCount) assert(MainTabs::tabBounds(tab+1,safe.width).left-bounds.right==0);
       }
     }
     for (int slot=0;slot<12;++slot) {
@@ -208,6 +218,13 @@ int main() {
 #include <initializer_list>
 #include "fontIds.h"
 constexpr uint8_t BUILTIN_READER_POINT_SIZES[]={12};
+// Mirrors ReaderFontSizes.h: getReaderFontId() snaps the stored point size
+// against the built-in table through this accessor, so the host stub must
+// provide the same seam or the extracted production method will not compile.
+const uint8_t* builtinReaderPointSizes(size_t& count) {
+  count=std::size(BUILTIN_READER_POINT_SIZES);
+  return BUILTIN_READER_POINT_SIZES;
+}
 struct CrossPointSettings {
   enum { NOTOSANS=1 };
   char sdFontFamilyName[8]{}; void* sdFontResolverCtx=nullptr;
@@ -237,131 +254,6 @@ int main() {
 '''
         for defines in ((), ('CROSSMUX_UI_PROFILE_HIGH_DPI',)):
             run_cpp(program, include_dirs=(ROOT / 'src',), defines=defines)
-
-    def test_main_tab_content_starts_below_shared_header(self):
-        files = (ROOT / 'src/activities/home/FileBrowserActivity.cpp').read_text()
-        settings = (ROOT / 'src/activities/settings/SettingsActivity.cpp').read_text()
-        apps = (ROOT / 'src/activities/apps/AppsMenuActivity.cpp').read_text()
-        stats = (ROOT / 'src/activities/apps/reading-stats/ReadingStatsActivity.cpp').read_text()
-        # Run the production layout preambles; unrelated data/row rendering stays
-        # covered by the existing style and FreeInkUI list checks.
-        file_layout = method(files, 'void FileBrowserActivity::buildScreen(').split('  // Full path band', 1)[0] + '}'
-        settings_preamble = method(settings, 'void SettingsActivity::buildScreen(').split('  if (usesAccordion())', 1)[0]
-        settings_layout = 'void SettingsActivity::buildScreen(UiScreen& screen) {\n' + settings_preamble[
-            settings_preamble.index('  const auto& metrics'):].replace(
-            '  const bool boldChineseCategories = usesAccordion() && I18N.getLanguage() == Language::ZH_CN;\n', '').replace('  const auto& metrics = UITheme::getInstance().getMetrics();\n', '') + '}'
-        stats_layout = method(stats, 'void ReadingStatsActivity::renderInx(').split('  const auto& books', 1)[0] + ' recorded=content; }'
-        program = r'''
-#include <cassert>
-#include <vector>
-#include "components/SubpageLayout.h"
-#include "components/themes/inx/InxTheme.h"
-#include "InxItemLayout.h"
-#define tr(key) #key
-class GfxRenderer {
- public:
-  int width=684,height=1216;
-  int getScreenWidth() const { return width; }
-  int getScreenHeight() const { return height; }
-  void clearScreen() {}
-};
-struct UITheme {
-  bool tabs=true;
-  Rect safe{}, empty{};
-  ThemeMetrics metrics=InxMetrics::values;
-  static UITheme& getInstance() { static UITheme theme; return theme; }
-  const ThemeMetrics& getMetrics() const { return metrics; }
-  Rect getScreenSafeArea(const GfxRenderer&,bool,bool) { return safe; }
-  static void drawCenteredWrappedText(const GfxRenderer&,Rect rect,int,const char*,int) { getInstance().empty=rect; }
-};
-namespace fui {
-struct Insets { int top,right,bottom,left; };
-struct ListProps { const int* items=nullptr; unsigned count=0; int action=0,inputMask=0; };
-constexpr int InputTouch=1;
-}
-struct UiScreen {
-  int top=-1;
-  bool absolute=false;
-  void setContentMarginFromScreen(fui::Insets margin) { top=margin.top; absolute=true; }
-  void setContentMargin(fui::Insets margin) { top=margin.top; absolute=false; }
-  void spacer(int gap) { top+=gap; }
-  void list(fui::ListProps) {}
-};
-struct Page {
-  GfxRenderer renderer;
-  bool usesMainTabBar() const { return UITheme::getInstance().tabs; }
-  Rect pageContentRect() const {
-    auto& theme=UITheme::getInstance();
-    const int top=theme.metrics.topPadding+theme.metrics.headerHeight;
-    const Rect safe=theme.safe;
-    return usesMainTabBar() ? Rect{safe.x,safe.y+top,safe.width,safe.height-top}
-                           : Rect{0,top,renderer.width,renderer.height-top-theme.metrics.buttonHintsHeight};
-  }
-};
-struct FileBrowserActivity : Page { void buildScreen(UiScreen&); };
-struct SettingsActivity : Page { void buildScreen(UiScreen&); };
-struct ReadingStatsActivity : Page {
-  bool renderedCoverMissing=false;
-  Rect recorded{};
-  void drawPageHeader(Rect,const char*) {}
-  void renderInx();
-};
-struct AppsMenuActivity : Page {
-  struct { int selected=0; } nav;
-  int count=12;
-  bool icons=true;
-  std::vector<int> rowItems;
-  Rect recorded{};
-  static constexpr int ACTION_ROW=1;
-  int getVisibleAppCount() const { return count; }
-  bool usesIconLayout() const { return icons; }
-  bool showMainTabContentSelection() const { return false; }
-  void drawIconGrid(Rect rect,int,bool) { recorded=rect; }
-  void syncListViewport(UiScreen&,fui::ListProps&) {}
-  Rect appContentRect() const;
-  int iconIndexFromPoint(int,int) const;
-  void buildScreen(UiScreen&);
-};
-''' + method(apps, 'Rect AppsMenuActivity::appContentRect(') + file_layout + settings_layout + stats_layout + method(apps, 'int AppsMenuActivity::iconIndexFromPoint(') + method(apps, 'void AppsMenuActivity::buildScreen(') + r'''
-int main() {
-  auto& theme=UITheme::getInstance();
-  for (const Rect safe : {Rect{5,5,674,1203},Rect{8,5,1203,674},Rect{5,8,674,1203},Rect{5,5,1203,674},Rect{0,0,480,800}}) {
-    theme.safe=safe;
-    const bool portrait=safe.width<safe.height;
-    const int width=safe.x+safe.width+(safe.x==0 ? 0 : safe.x==8 ? 5 : portrait ? 5 : 8);
-    const int height=safe.y+safe.height+(safe.y==0 ? 0 : safe.y==8 ? 5 : portrait ? 8 : 5);
-    for (bool tabs : {true,false}) {
-      theme.tabs=tabs;
-      const int bottom=(tabs ? safe.y : 0)+theme.metrics.topPadding+theme.metrics.headerHeight;
-      FileBrowserActivity files; files.renderer.width=width; files.renderer.height=height;
-      UiScreen fileScreen; files.buildScreen(fileScreen);
-      assert(fileScreen.absolute && fileScreen.top==bottom+theme.metrics.verticalSpacing);
-      SettingsActivity settings; settings.renderer=files.renderer;
-      UiScreen settingsScreen; settings.buildScreen(settingsScreen);
-      assert(settingsScreen.absolute && settingsScreen.top==bottom);
-      ReadingStatsActivity stats; stats.renderer=files.renderer; stats.renderInx();
-      assert(stats.recorded.y==bottom+6 && stats.recorded.y+stats.recorded.height==(tabs ? safe.y+safe.height : height-theme.metrics.buttonHintsHeight)-6);
-      AppsMenuActivity apps; apps.renderer=files.renderer;
-      UiScreen screen; apps.buildScreen(screen);
-      assert(apps.recorded.y==bottom+theme.metrics.verticalSpacing);
-      assert(apps.recorded.y+apps.recorded.height==(tabs ? safe.y+safe.height : height-theme.metrics.buttonHintsHeight)-theme.metrics.verticalSpacing);
-      const Rect grid=apps.recorded;
-      for (int slot=0;slot<InxGridGeometry::itemsPerPage;++slot) {
-        const Rect cell=InxGridGeometry::cellBounds(slot,grid.width,grid.height);
-        assert(apps.iconIndexFromPoint(grid.x+cell.x,grid.y+cell.y)==slot);
-        assert(apps.iconIndexFromPoint(grid.x+cell.x-1,grid.y+cell.y)==-1);
-      }
-      assert(apps.iconIndexFromPoint(grid.x,grid.y-1)==-1);
-      assert(apps.iconIndexFromPoint(grid.x,grid.y+grid.height)==-1);
-      apps.icons=false; apps.buildScreen(screen);
-      assert(screen.top==bottom+theme.metrics.verticalSpacing && screen.absolute);
-      apps.count=0; apps.buildScreen(screen);
-      assert(theme.empty.y==grid.y && theme.empty.height==grid.height);
-    }
-  }
-}
-'''
-        run_cpp(program, include_dirs=(ROOT / 'src', ROOT / 'lib/hal'))
 
     def test_all_main_tabs_share_drawing_and_input_geometry(self):
         activity = (ROOT / 'src/activities/Activity.cpp').read_text()
@@ -434,6 +326,7 @@ struct ActivityManager {
 };
 ''' + method(activity, 'bool Activity::usesMainTabBar(') + method(activity, 'MainTabLayout Activity::mainTabLayout(') + method(activity, 'void Activity::drawPageHeader(') + method(manager, 'bool ActivityManager::handleMainTabInput(') + r'''
 int main() {
+  constexpr int kTabCount = static_cast<int>(MainTabs::values.size());
   auto& theme=UITheme::getInstance();
   for (const Rect safe : {Rect{5,5,674,1203},Rect{8,5,1203,674},Rect{5,8,674,1203},Rect{5,5,1203,674},Rect{0,0,480,800}}) {
     theme.safe=safe;
@@ -443,8 +336,8 @@ int main() {
       page.drawPageHeader(Rect{0,0,999,66},"title");
       assert(theme.drawn.x==expected.x && theme.drawn.y==expected.y);
       assert(theme.drawn.width==expected.width && theme.drawn.height==expected.height && theme.selected==current);
-      for (int i=0;i<5;++i) {
-        const int left=expected.x+expected.width*i/5, right=expected.x+expected.width*(i+1)/5;
+      for (int i=0;i<kTabCount;++i) {
+        const int left=expected.x+expected.width*i/kTabCount, right=expected.x+expected.width*(i+1)/kTabCount;
         for (int x=left;x<right;++x) {
           ActivityManager m; m.currentActivity=&page;
           m.mappedInput.x=x; m.mappedInput.y=expected.y;
@@ -454,8 +347,18 @@ int main() {
                  : current==target ? m.updates==1 && m.destination==MainTab::None : m.destination==target);
         }
       }
-      for (auto point : {std::pair{expected.x-1,expected.y},std::pair{expected.x+expected.width,expected.y},
-                         std::pair{expected.x,expected.y-1},std::pair{expected.x,expected.y+expected.height}}) {
+      // Spec S-1.9 draws a 1px border on the bar's first row and treats a tap on
+      // it as a tap on the bar, so a press one pixel outside the bar
+      // horizontally is still consumed -- it just navigates nowhere and leaves
+      // the tab focus alone.
+      for (auto point : {std::pair{expected.x-1,expected.y},std::pair{expected.x+expected.width,expected.y}}) {
+        ActivityManager m; m.currentActivity=&page; m.mainTabFocus=MainTabFocus::Tabs;
+        m.mappedInput.x=point.first; m.mappedInput.y=point.second;
+        assert(m.handleMainTabInput() && m.destination==MainTab::None && m.mainTabFocus==MainTabFocus::Tabs);
+      }
+      // A tap that misses the bar altogether is not consumed and hands the
+      // focus back to the content.
+      for (auto point : {std::pair{expected.x,expected.y-1},std::pair{expected.x,expected.y+expected.height}}) {
         ActivityManager m; m.currentActivity=&page; m.mainTabFocus=MainTabFocus::Tabs;
         m.mappedInput.x=point.first; m.mappedInput.y=point.second;
         assert(!m.handleMainTabInput() && m.destination==MainTab::None && m.mainTabFocus==MainTabFocus::Content);
@@ -575,11 +478,19 @@ struct ActivityManager {
   void cancelIdleRender() {}
   void goHome() { mainTabFocus=MainTabFocus::Tabs;replaceActivity(page(theme)); }
   void goToMainTab(MainTab tab) {
+    // Mirrors production: MainTab::None is the Home tab's Back target and is a
+    // deliberate no-op, so Back on Home keeps the user where they are.
+    if(tab==MainTab::None) return;
     auto p=page("INX");p->tab=tab;replaceActivity(std::move(p));
   }
-  void goToStandby() {
+  void goToSleep(bool fromTimeout=false) {
+    // The standby app was removed; Back now replaces the current activity with
+    // SleepActivity and the device sleeps. Model that as a counted transition
+    // without the production loop() render nudge, which the gesture state
+    // machine under test does not depend on.
+    (void)fromTimeout;
     ++standbyCalls;
-    auto p=std::make_unique<Activity>();p->home=false;p->name="Standby";
+    auto p=std::make_unique<Activity>();p->home=false;p->name="Sleep";
     replaceActivity(std::move(p));
   }
   void resetHomeStandbyInput();
@@ -610,7 +521,7 @@ void freshBack(ActivityManager& m) {
   m.tick({.pressed=true,.held=true});assert(m.standbyCalls==0);
   m.tick({.held=true});assert(m.standbyCalls==0);
   m.tick({.released=true});assert(m.standbyCalls==1);
-  m.tick();assert(m.standbyCalls==1 && m.currentActivity->name=="Standby");
+  m.tick();assert(m.standbyCalls==1 && m.currentActivity->name=="Sleep");
 }
 int main() {
   using Button=MappedInputManager::Button;
@@ -711,13 +622,19 @@ int main() {
     if(tab==MainTab::Recent) continue;
     ActivityManager tabs("INX");tabs.currentActivity->tab=tab;
     tabs.tick({.released=true});
-    assert(tabs.currentActivity->tab==MainTab::Recent && tabs.standbyCalls==0);
+    // Spec S-1.9: Home is the landing tab and every other tab's Back target is
+    // Home. Home's own Back target is MainTab::None, which is a no-op, so the
+    // user stays on Home either way.
+    assert(tabs.currentActivity->tab==MainTab::Home && tabs.standbyCalls==0);
     tabs.tick({.released=true});assert(tabs.standbyCalls==0);
     freshBack(tabs);
   }
   ActivityManager touchTab("INX");
   touchTab.mappedInput={.held=true};touchTab.resetHomeStandbyInput();
-  touchTab.tick({.held=true,.tap=true,.x=144,.y=720});
+  // Tap the centre of the Library cell rather than a hard-coded pixel: the bar
+  // carries four tabs now, so the old x=144 landed on Recent.
+  const auto libraryCell=MainTabs::tabBounds(MainTabs::indexOf(MainTab::Library),480);
+  touchTab.tick({.held=true,.tap=true,.x=(libraryCell.left+libraryCell.right)/2,.y=720});
   assert(touchTab.currentActivity->tab==MainTab::Library && touchTab.standbyCalls==0);
 }
 '''
@@ -727,19 +644,25 @@ int main() {
     def test_inx_recent_render_and_flow_use_the_safe_content_clip(self):
         source = (ROOT / 'src/activities/home/InxRecentActivity.cpp').read_text()
         program = (r'''
+#include <algorithm>
 #include <cassert>
+#include <cstdint>
 #include <cstdio>
 #include <string>
 #include <vector>
 #include "InxRecentLayout.h"
 #include "components/SubpageLayout.h"
 #include "InxItemLayout.h"
+#include "activities/MainTab.h"
 #include "components/themes/inx/InxTheme.h"
 #define tr(key) #key
 constexpr int kGap=8, kPagePadding=18, kProgressHeight=6;
 Rect screenSafe;
 class GfxRenderer {
  public:
+  // The PaperRead render path (readpico) paints screen-absolute and never opens
+  // a clip scope, so the legacy clip invariants only apply to the other branch.
+  static constexpr bool paperRead = FREEINK_DEVICE_READPICO != 0;
   mutable Rect clip{};
   mutable bool clipped=false;
   bool flow=false;
@@ -757,19 +680,48 @@ class GfxRenderer {
   void clearScreen() const { assert(!clipped); }
   void displayBuffer() const { assert(!clipped); }
   int getLineHeight(int) const { return 18; }
-  void fillRect(int,int,int w,int h,bool) const { assert(clipped && w>0 && h>0); }
+  // PaperReadUi centres the empty-state line and right-aligns the trailing
+  // label, so the render path needs a text measurement.
+  int getTextWidth(int,const char*) const { return 120; }
+  void fillRect(int,int,int w,int h,bool) const {
+    if (paperRead) { assert(!clipped && w>0 && h>0); return; }
+    assert(clipped && w>0 && h>0);
+  }
   void drawLine(int x,int y,int right,int,bool) const {
+    if (paperRead) { assert(!clipped); return; }
     assert(clipped && x==clip.x && right==clip.x+clip.width-1 && y>=clip.y && y<clip.y+clip.height);
   }
   void drawText(int,int x,int y,const char*) const {
+    if (paperRead) { assert(!clipped); ++textCalls; return; }
+    assert(clipped && x>=clip.x && x<clip.x+clip.width && y>=clip.y && y<clip.y+clip.height);
+    ++textCalls;
+  }
+  // The PaperRead rows pass an explicit ink/white flag for the inverted
+  // selection block.
+  void drawText(int,int x,int y,const char*,bool) const {
+    if (paperRead) { assert(!clipped); ++textCalls; return; }
     assert(clipped && x>=clip.x && x<clip.x+clip.width && y>=clip.y && y<clip.y+clip.height);
     ++textCalls;
   }
 };
-struct RecentBook { std::string title; };
-struct ReadingBookStats { unsigned totalReadingMs=0, lastSessionMs=0, sessions=0, chapterProgressPercent=0; };
+struct RecentBook { std::string title, author; };
+struct ReadingBookStats {
+  unsigned totalReadingMs=0, lastSessionMs=0, sessions=0, chapterProgressPercent=0;
+  bool completed=false;
+};
 namespace ReadingStatsAnalytics { std::string formatDurationHm(unsigned) { return "0m"; } }
 unsigned char progressOf(const ReadingBookStats*) { return 50; }
+const char* titleOf(const RecentBook& book) { return book.title.c_str(); }
+// Mirrors PaperReadUi.h: the readpico render path draws the spec sub-page
+// header, fills the 101..1112 body band and leaves the bottom strip to the
+// shared tab bar.
+struct PaperReadUi {
+  static constexpr int kScreenWidth=684;
+  static constexpr int kSideMargin=32;
+  static constexpr int kBodyTop=101;
+  static constexpr int kBodyBottom=1112;
+  static void drawHeader(const GfxRenderer& r,const char*) { assert(!r.clipped); }
+};
 void drawSparseInk(const GfxRenderer& r,Rect) { assert(r.clipped); }
 void drawThickFrame(const GfxRenderer& r,Rect) { assert(r.clipped); }
 void drawProgressBadge(const GfxRenderer& r,Rect,unsigned char) { assert(r.clipped); }
@@ -803,6 +755,11 @@ struct UITheme {
     assert(r.clipped && bounds.x==r.clip.x && bounds.y==r.clip.y); ++getInstance().emptyCalls;
   }
   void drawMainTabStatusBar(const GfxRenderer&,Rect) { assert(false); }
+  // Spec S-1.9: the page body never paints the bottom strip; the shared chrome
+  // does, after render() returns. The PaperRead path must therefore call this
+  // exactly once per frame.
+  int tabBarCalls=0;
+  void drawMainTabBar(const GfxRenderer& r,Rect,MainTab) { assert(!r.clipped); ++tabBarCalls; }
   void drawButtonHints(const GfxRenderer& r,const char*,const char*,const char*,const char*) { assert(!r.clipped); }
   void drawBatteryRight(const GfxRenderer& r,Rect rect,bool) {
     assert(!r.clipped && rect.x+rect.width==safe.x+safe.width-12 && rect.y==safe.y+safe.height-(FREEINK_DEVICE_READPICO ? 24 : 30));
@@ -821,6 +778,13 @@ struct InxRecentActivity {
   bool usesMainTabBar() const { return true; }
   bool mainTabsAtBottom() const { return false; }
   bool hasMainTabStatusBar() const { return false; }
+  // The readpico render path asks the shared chrome for the bar rect so it can
+  // hand it back to drawMainTabBar().
+  MainTabLayout mainTabLayout() const {
+    return {Rect{0,PaperReadUi::kBodyBottom,PaperReadUi::kScreenWidth,96},
+            Rect{0,0,PaperReadUi::kScreenWidth,0},
+            Rect{0,PaperReadUi::kBodyTop,PaperReadUi::kScreenWidth,PaperReadUi::kBodyBottom-PaperReadUi::kBodyTop}};
+  }
   Rect pageContentRect() const {
     auto& theme=UITheme::getInstance();
     const int top=theme.metrics.topPadding+theme.metrics.headerHeight;
@@ -854,18 +818,34 @@ int main() {
   for (const Rect safe : {Rect{5,5,674,1203},Rect{8,5,1203,674},Rect{5,8,674,1203},Rect{5,5,1203,674},Rect{0,0,480,800}}) {
     theme.safe=screenSafe=safe;
     InxRecentActivity page;
-    std::vector<RecentBook> books{{"中文长书名测试"},{"另一本书"},{"More books"}};
+    std::vector<RecentBook> books{{"中文长书名测试","作者甲"},{"另一本书","作者乙"},{"More books","Author C"}};
     page.books=&books;
     for (auto layout : {InxRecentLayout::Flow,InxRecentLayout::Grid,InxRecentLayout::List,
                         InxRecentLayout::Icons,InxRecentLayout::Cover}) {
       page.chosen=layout; page.renderer.flow=layout==InxRecentLayout::Flow;
       page.render(RenderLock{}); assert(!page.renderer.clipped);
     }
-    assert(page.coverCalls==13 && page.renderer.metricCalls==4 && page.renderer.textCalls==1);
+    if (GfxRenderer::paperRead) {
+      // Spec S-2: each of the three 96px rows paints a title, an author and a
+      // right-aligned trailing label, the selected row is a solid inverted
+      // block and consecutive rows are separated by a 1px rule. Five layouts
+      // over the same three-book page.
+      assert(page.coverCalls==0 && page.renderer.metricCalls==0 && page.renderer.textCalls==45);
+    } else {
+      assert(page.coverCalls==13 && page.renderer.metricCalls==4 && page.renderer.textCalls==1);
+    }
     books.clear(); page.render(RenderLock{});
     page.books=nullptr; page.render(RenderLock{});
   }
-  assert(theme.emptyCalls==10 && theme.batteryCalls==35);
+  if (GfxRenderer::paperRead) {
+    // The PaperRead empty state is a centred single line, not the legacy centred
+    // wrapped block, and the masthead battery belongs to the shared chrome
+    // rather than to each page body. Every frame still hands the bottom strip
+    // to the shared tab bar exactly once.
+    assert(theme.emptyCalls==0 && theme.batteryCalls==0 && theme.tabBarCalls==35);
+  } else {
+    assert(theme.emptyCalls==10 && theme.batteryCalls==35);
+  }
 }
 ''')
         for readpico in (0, 1):
@@ -984,270 +964,6 @@ int main() {
   assert(r.subtitles == 12);
 }
 ''')
-
-    def test_sync_refresh_survives_wifi_child(self):
-        source = (WEREAD / 'WeReadProgressSyncActivity.cpp').read_text()
-        enter = method(source, 'void WeReadProgressSyncActivity::onEnter(')
-        callback = method(source, 'void WeReadProgressSyncActivity::onWifiSelectionComplete(')
-        render = method(source, 'void WeReadProgressSyncActivity::render(')
-        display = render[render.rindex('  renderer.displayBuffer('):render.rindex('}')]
-        run_cpp(r'''
-#include <atomic>
-#include <cassert>
-#include <initializer_list>
-namespace HalDisplay { enum RefreshMode { FULL_REFRESH, FAST_REFRESH }; }
-struct Renderer {
-  HalDisplay::RefreshMode last = HalDisplay::FAST_REFRESH;
-  void displayBuffer(HalDisplay::RefreshMode mode=HalDisplay::FAST_REFRESH) { last=mode; }
-};
-struct Activity { void onEnter() {} };
-namespace ReaderUtils { void applyOrientation(Renderer&, int) {} }
-struct { int orientation=0; } SETTINGS;
-bool loggedIn=true;
-namespace WeReadStore {
-struct Session { bool valid() { return true; } void clear() {} };
-bool loadSession(Session&) { return loggedIn; }
-}
-namespace NetworkStartup { void prepare(Renderer&) {} }
-constexpr int WL_CONNECTED=1;
-struct { int connected=1; int status() { return connected; } } WiFi;
-struct WeReadProgressSyncActivity : Activity {
-  enum class State { WifiSelection, Starting, LoginRequired };
-  State state_ = State::WifiSelection;
-  std::atomic<bool> fullRefreshPending_{true};
-  Renderer renderer;
-  bool wifiActivated_=false, returned=false, child=false;
-  void requestUpdate() {}
-  void launchWifiSelection() { child=true; }
-  void returnToReader() { returned=true; }
-  void onEnter();
-  void onWifiSelectionComplete(bool);
-  void renderRefresh() { DISPLAY }
-};
-'''.replace('DISPLAY', display) + enter + callback + r'''
-int main() {
-  for (bool login : {false,true}) for (int connected : {0,1}) {
-    loggedIn=login; WiFi.connected=connected;
-    WeReadProgressSyncActivity page;
-    page.onEnter();
-    if (page.child) {
-      page.renderer.displayBuffer(); // A child paint cannot consume the parent's flag.
-      WiFi.connected=1;
-      page.onWifiSelectionComplete(true);
-    }
-    page.renderRefresh(); assert(page.renderer.last==HalDisplay::FULL_REFRESH);
-    page.renderRefresh(); assert(page.renderer.last==HalDisplay::FAST_REFRESH);
-    WiFi.connected=1;
-    page.onWifiSelectionComplete(true);
-    page.renderRefresh(); assert(page.renderer.last==HalDisplay::FULL_REFRESH);
-    page.renderRefresh(); assert(page.renderer.last==HalDisplay::FAST_REFRESH);
-    page.onWifiSelectionComplete(false); assert(page.returned);
-  }
-}
-''')
-
-    def test_resource_error_messages_and_layout(self):
-        source = (WEREAD / 'WeReadActivity.cpp').read_text()
-        message = method(source, 'const char* WeReadActivity::errorMessage(')
-        render = method(source, 'void WeReadActivity::render(')
-        error = render.split('    case State::Error: {', 1)[1].split('    case State::LogoutError:', 1)[0]
-        keys = ('STR_WEREAD_STORAGE_ERROR', 'STR_WEREAD_CHECK_STORAGE_SPACE', 'STR_WEREAD_CHECK_SD_CARD',
-                'STR_WEREAD_MEMORY_ERROR', 'STR_WEREAD_RESTART_HINT', 'STR_WEREAD_HTTP_ERROR',
-                'STR_WEREAD_NO_WIFI', 'STR_WEREAD_CACHE_NOT_AVAILABLE', 'STR_WEREAD_CACHE_WHOLE_BOOK_ONLY')
-        for language in ('chinese', 'english'):
-            spec = importlib.util.spec_from_file_location('gen_i18n', ROOT / 'scripts/gen_i18n.py')
-            generator = importlib.util.module_from_spec(spec)
-            spec.loader.exec_module(generator)
-            translations = generator.parse_yaml_file(str(ROOT / f'lib/I18n/translations/{language}.yaml'))
-            strings = '\n'.join(f'const char* {key} = {json.dumps(translations[key], ensure_ascii=False)};' for key in keys)
-            run_cpp(r'''
-#include <algorithm>
-#include <cassert>
-#include <cstring>
-#include <string>
-#include <vector>
-#include <initializer_list>
-''' + strings + r'''
-#define tr(key) key
-namespace WeReadClient { enum class Error { SdCard, OutOfMemory, Network, Unavailable, WholeBookOnly, Protocol }; }
-namespace EpdFontFamily { enum Style { BOLD, REGULAR }; }
-constexpr int UI_10_FONT_ID=10, WL_CONNECTED=1;
-struct { int connected=1; int status() const { return connected; } } WiFi;
-struct Rect { int x,y,width,height; };
-struct Metrics { int contentSidePadding=20; };
-struct Renderer {
-  struct ClipScope { ClipScope(const Renderer&,int,int,int,int) {} };
-  int getLineHeight(int) const { return 26; }
-  int getTextWidth(const char* text) const {
-    int width=0;
-    for (; *text; ++text) {
-      unsigned char c=*text;
-      if (c < 128) width+=12;
-      else if ((c & 0xc0) != 0x80) width+=26;
-    }
-    return width;
-  }
-};
-using GfxRenderer=Renderer;
-std::vector<std::string> shown;
-struct { void drawPopup(const Renderer&, const char* s) { shown.emplace_back(s); } } GUI;
-namespace SubpageLayout {
-int sectionGap(const Metrics&) { return 12; }
-int centeredTop(Rect r,int h) { return r.y + std::max(0,(r.height-h)/2); }
-Rect insetHorizontal(Rect r,int n) { return {r.x+n,r.y,r.width-2*n,r.height}; }
-}
-namespace UITheme {
-void drawCenteredText(const Renderer& r,Rect rect,int,int y,const char* text,bool,EpdFontFamily::Style) {
-  assert(r.getTextWidth(text)<=rect.width);
-  assert(y>=rect.y && y+26<=rect.y+rect.height);
-  shown.emplace_back(text);
-}
-}
-struct WeReadActivity {
-  WeReadClient::Error error_;
-  Renderer renderer;
-  Metrics metrics;
-  Rect content;
-  enum class State { Error };
-  const char* errorMessage() const;
-  void renderError() { switch (State::Error) { case State::Error: { ERROR } }
-};
-'''.replace('ERROR', error) + message + r'''
-int main() {
-  using E=WeReadClient::Error;
-  for (Rect bounds : {Rect{0,66,480,694},Rect{0,66,800,374}}) {
-    WeReadActivity page{E::SdCard,{}, {},bounds};
-    shown.clear(); page.renderError();
-    assert(shown==std::vector<std::string>({STR_WEREAD_STORAGE_ERROR,STR_WEREAD_CHECK_STORAGE_SPACE,STR_WEREAD_CHECK_SD_CARD}));
-    page.error_=E::OutOfMemory; shown.clear(); page.renderError();
-    assert(shown==std::vector<std::string>({STR_WEREAD_MEMORY_ERROR,STR_WEREAD_RESTART_HINT}));
-    page.error_=E::Network; shown.clear(); page.renderError();
-    assert(shown==std::vector<std::string>({STR_WEREAD_HTTP_ERROR}));
-    WiFi.connected=0; shown.clear(); page.renderError();
-    assert(shown==std::vector<std::string>({STR_WEREAD_NO_WIFI})); WiFi.connected=1;
-  }
-}
-''')
-
-
-    def test_cover_download_creates_directory_before_request(self):
-        source = (ROOT / 'lib/WeReadWebApi/src/WeReadClient.cpp').read_text()
-        download = method(source, 'Error Operation::fetchCoverSource(')
-        sink = source[source.index('struct FileSink {'):source.index('bool finishFile(')]
-        run_cpp(r"""
-#include <algorithm>
-#include <cassert>
-#include <cstdarg>
-#include <cstdint>
-#include <cstdio>
-#include <cstring>
-#include <filesystem>
-#include <fstream>
-#include <string>
-namespace fs = std::filesystem;
-std::string lastLog;
-void logError(const char*, const char* format, ...) {
-  char buf[512]; va_list args; va_start(args,format);
-  vsnprintf(buf,sizeof(buf),format,args); va_end(args); lastLog=buf;
-}
-#define LOG_ERR(...) logError(__VA_ARGS__)
-bool shortWrite=false;
-struct HalFile {
-  std::ofstream stream;
-  bool isOpen() const { return stream.is_open(); }
-  void close() { stream.close(); }
-  size_t write(const void* data,size_t size) {
-    if (shortWrite) return 0;
-    stream.write(static_cast<const char*>(data),size);
-    return stream.good() ? size : 0;
-  }
-};
-struct {
-  int directoryChecks=0;
-  bool exists(const char* p) { return fs::exists(p); }
-  bool remove(const char* p) { return fs::remove(p); }
-  bool ensureDirectoryExists(const char* p) {
-    ++directoryChecks;
-    std::error_code ec;
-    fs::create_directories(p,ec);
-    return !ec && fs::is_directory(p);
-  }
-  bool openFileForWrite(const char*,const std::string& path,HalFile& file) {
-    file.stream.open(path,std::ios::binary|std::ios::trunc);
-    return file.isOpen();
-  }
-} Storage;
-namespace WeReadProtocol { enum class ImageType { None,Jpeg,Png,Detect }; }
-namespace WeReadStore {
-  bool rootReady=true;
-  bool ensureRoot() { return rootReady; }
-  struct ImageRecord { char href[64]{},url[512]{}; };
-  enum class ImageWorkState { Pending,Skipped,Complete };
-}
-namespace WeReadHttpClient {
-  bool extractHttpsHost(const char* url,char*,size_t) { return strncmp(url,"https://",8)==0; }
-}
-const char* coverSourceName(WeReadProtocol::ImageType type) {
-  return type==WeReadProtocol::ImageType::Png ? "cover.png" : "cover.jpg";
-}
-""" + sink + r"""
-enum class Error { Ok,SdCard,Protocol };
-enum class CoverWorkResult { Skipped,Pending,Complete };
-struct Operation {
-  WeReadProtocol::ImageType coverType_=WeReadProtocol::ImageType::Jpeg;
-  WeReadStore::ImageWorkState coverState_=WeReadStore::ImageWorkState::Pending;
-  char url_[512]="https://cdn.weread.qq.com/cover.jpg",imageHost_[128]{};
-  std::string bookDir_;
-  uint8_t coverAttempts_=0,coverRedirects_=0;
-  int requests=0;
-  Error fetchCoverSource(CoverWorkResult&);
-  Error requestImage(WeReadStore::ImageRecord& image,WeReadStore::ImageWorkState& state,
-                     uint8_t&,uint8_t&,bool,WeReadProtocol::ImageType* detected) {
-    ++requests;
-    assert(fs::is_directory(bookDir_)); // Original code fails here for a shelf-only book.
-    const std::string path=bookDir_+"/"+image.href+".part";
-    FileSink sink; sink.path=&path;
-    const uint8_t data[]={0xff,0xd8,0xff};
-    if (!resetFile(&sink) || !writeFile(&sink,data,sizeof(data))) return Error::SdCard;
-    state=WeReadStore::ImageWorkState::Complete;
-    if (detected) *detected=WeReadProtocol::ImageType::Jpeg;
-    return Error::Ok;
-  }
-};
-""" + download + r"""
-int main(int argc,char** argv) {
-  assert(argc==1);
-  const fs::path root=fs::path(argv[0]).parent_path()/"sd";
-  Operation op; op.bookDir_=(root/"weread"/"new-book").string();
-  CoverWorkResult result;
-  assert(!fs::exists(op.bookDir_));
-  assert(op.fetchCoverSource(result)==Error::Ok && result==CoverWorkResult::Complete);
-  assert(fs::file_size(fs::path(op.bookDir_)/"cover.jpg.part")==3);
-  assert(op.fetchCoverSource(result)==Error::Ok && op.requests==2);
-  WeReadStore::rootReady=false;
-  assert(op.fetchCoverSource(result)==Error::SdCard && op.requests==2);
-  assert(lastLog.find(op.bookDir_)!=std::string::npos);
-  WeReadStore::rootReady=true;
-  op.bookDir_=(root/"not-a-directory").string(); std::ofstream(op.bookDir_) << "keep";
-  assert(op.fetchCoverSource(result)==Error::SdCard && op.requests==2);
-  assert(fs::file_size(op.bookDir_)==4);
-  const int checks=Storage.directoryChecks;
-  for (const char* url : {"", "http://invalid/cover.jpg"}) {
-    strcpy(op.url_,url);
-    assert(op.fetchCoverSource(result)==Error::Ok && result==CoverWorkResult::Skipped);
-  }
-  assert(Storage.directoryChecks==checks && op.requests==2);
-  std::string missing=(root/"missing"/"cover.part").string(); FileSink failed; failed.path=&missing;
-  assert(!resetFile(&failed) && lastLog.find(missing)!=std::string::npos);
-  std::string good=(root/"short.part").string(); FileSink shortSink; shortSink.path=&good;
-  assert(resetFile(&shortSink)); shortWrite=true;
-  const uint8_t bytes[]={1,2,3};
-  assert(!writeFile(&shortSink,bytes,3));
-  assert(shortSink.failure==FileSink::Failure::SdCard && shortSink.size==0);
-  assert(lastLog.find("written=0 expected=3")!=std::string::npos);
-}
-""")
-
 
     def test_txt_spacing_keeps_cache_fields_byte_aligned(self):
         import re

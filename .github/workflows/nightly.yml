@@ -14,6 +14,12 @@ on:
   push:
     tags:
       - '*.*.*'
+      # JRB OS publishes its own builds under jrbos-v* tags. Those are not
+      # CrossMux firmware versions, so keep them out of this workflow: the
+      # prepare step rejects any tag that is not exactly the platformio.ini
+      # version, which would otherwise leave a failed run behind on every
+      # JRB OS release.
+      - '!jrbos-v*'
 
 concurrency:
   group: firmware-${{ github.event_name == 'push' && 'stable' || 'nightly' }}-publish

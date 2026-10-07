@@ -36,6 +36,10 @@ class LibraryListActivity final : public UiTabListActivity {
   void onEnter() override;
   void onExit() override;
 
+#if FREEINK_DEVICE_READPICO
+  MainTab mainTab() const override { return MainTab::Library; }
+#endif
+
  protected:
   // --- UiListActivity / UiTabListActivity contract ---------------------------
   int listCount() const override;
@@ -121,6 +125,18 @@ class LibraryListActivity final : public UiTabListActivity {
   void drawHoldHelp() const;
   const char* headerTitle() const override;
 
+#if FREEINK_DEVICE_READPICO
+  // PaperRead spec S-3: draw the cover grid + filter chips + pager and return
+  // true (the caller skips the fui::list shelf entirely).
+  bool renderPaperReadLibrary();
+  // Number of books passing the active chip filter.
+  int paperreadFilteredCount();
+  // entry (post-filter position) -> resolved book text and reading state.
+  bool paperreadEntryText(int entry, std::string& title, uint8_t& percent, bool& completed,
+                          std::string* pathOut = nullptr);
+  void handlePaperReadInput();
+#endif
+
   // Ring 0 is the strip; the selected BOOK is ring - 1, with the strip keeping
   // row 0 as the working selection exactly as the pre-ring code did.
   int selectedEntry() const;
@@ -138,6 +154,17 @@ class LibraryListActivity final : public UiTabListActivity {
   void refreshOverlap();
 
   library::LibraryIndexFile index;
+#if FREEINK_DEVICE_READPICO
+  // PaperRead spec S-3: the library tab is a 3x2 cover grid with three filter
+  // chips. The chip filter and the grid page are local UI state, independent of
+  // the sort strip used by the fui::list shelf.
+  enum class PaperReadFilter : uint8_t { All, Reading, Unread };
+  PaperReadFilter paperreadFilter = PaperReadFilter::All;
+  int paperreadPage = 0;
+  // Cursor within the current page (0..5), used by buttons and as the tap
+  // fallback when a tap misses a card.
+  int paperreadCursor = 0;
+#endif
   int activeTabIndex = 0;
   library::SortOrder sortOrder = library::SortOrder::RecentDesc;
   // One bit per tab; Recent starts descending (newest first).

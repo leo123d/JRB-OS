@@ -68,22 +68,18 @@ add_subdirectory(library_index_file)
 add_subdirectory(library_builder)
 add_subdirectory(minibidi_arabic)
 add_subdirectory(combining_marks)
+# The host tests for the deleted app suite (src/activities/apps, WeRead) were
+# removed together with the apps themselves; see the phase1 "delete apps"
+# commit. Keeping their targets here made `cmake -S test` fail outright.
 add_subdirectory(time_utils)
-add_subdirectory(weread_webapi)
-add_subdirectory(airpage)
-add_subdirectory(chinese_chess)
 add_subdirectory(sd_card_font_cache_format)
-add_subdirectory(pixel_switch)
 add_subdirectory(inx_navigation)
 add_subdirectory(sloppy_digits)
-add_subdirectory(woodfish_store)
 add_subdirectory(book_cover_loader)
-add_subdirectory(calculator)
 add_subdirectory(txt_page_index)
 add_subdirectory(txt_paragraph)
 add_subdirectory(txt_encoding)
 add_subdirectory(txt_chapter_index)
-add_subdirectory(game_ui)
 add_subdirectory(credential_integrity)
 add_subdirectory(footnote_list)
 add_subdirectory(waveshare_function_button)
@@ -118,7 +114,7 @@ add_subdirectory(reader_build_failure)
 add_subdirectory(reader_font_preview)
 
 # Font fallback reuses the existing Unicode mark classification.
-foreach(font_test DifferentialRoundingTest LigatureGuardTest CalculatorFontTest SdCardFontMemoryTest SdCardFontPagedTest)
+foreach(font_test DifferentialRoundingTest LigatureGuardTest SdCardFontMemoryTest SdCardFontPagedTest)
   target_sources(${font_test} PRIVATE
     ${REPO_ROOT}/lib/MiniBidi/minibidi.c
     ${REPO_ROOT}/lib/MiniBidi/BidiUtils.cpp)
@@ -128,8 +124,6 @@ foreach(font_test DifferentialRoundingTest LigatureGuardTest CalculatorFontTest 
 endforeach()
 
 find_package(Python3 REQUIRED COMPONENTS Interpreter)
-add_test(NAME WeReadLogout
-  COMMAND ${Python3_EXECUTABLE} ${REPO_ROOT}/scripts/tests/test_weread_logout.py)
 add_test(NAME BuiltinFontShrink
   COMMAND ${Python3_EXECUTABLE} ${REPO_ROOT}/scripts/tests/test_builtin_font_shrink.py)
 add_test(NAME PioarduinoCache
@@ -138,8 +132,8 @@ add_test(NAME ControlCenterGesture
   COMMAND ${Python3_EXECUTABLE} ${REPO_ROOT}/scripts/tests/test_control_center_gesture.py)
 add_test(NAME ReadingUiRegressions
   COMMAND ${Python3_EXECUTABLE} ${REPO_ROOT}/scripts/tests/test_reading_ui_regressions.py)
-add_test(NAME DownloadMemoryLifecycle
-  COMMAND ${Python3_EXECUTABLE} ${REPO_ROOT}/scripts/tests/test_download_memory_lifecycle.py)
+# DownloadMemoryLifecycle was removed with the network stack: it compiled the
+# deleted FontDownloadActivity / OtaUpdateActivity / PluginCatalogActivity.
 add_test(NAME WifiFontRecovery
   COMMAND ${Python3_EXECUTABLE} ${REPO_ROOT}/scripts/tests/test_wifi_font_recovery.py)
 add_test(NAME HalClockSntp
@@ -170,7 +164,8 @@ add_test(NAME VectorGrayFallback
 
 
 add_test(NAME UnifiedKeyboard COMMAND ${Python3_EXECUTABLE} ${REPO_ROOT}/test/inx_navigation/test_unified_keyboard.py)
-add_test(NAME TouchNetworkControls COMMAND ${Python3_EXECUTABLE} ${REPO_ROOT}/test/inx_navigation/test_touch_network.py)
+# TouchNetworkControls was removed with the network stack: its subject was
+# WifiSelectionActivity's touch footer.
 add_test(NAME ThemeMenus COMMAND ${Python3_EXECUTABLE} ${REPO_ROOT}/test/inx_navigation/test_theme_menus.py)
 
 add_test(NAME CoverGridCompatibility COMMAND ${Python3_EXECUTABLE} ${REPO_ROOT}/test/inx_navigation/test_cover_grid.py)
@@ -194,20 +189,19 @@ add_test(NAME FileBrowserImages
 
 add_test(NAME ArduinoBootstrapLto COMMAND ${Python3_EXECUTABLE} -m unittest discover -s ${REPO_ROOT}/scripts/tests -p test_pioarduino_cache.py)
 add_subdirectory(reader_session)
-add_subdirectory(plugin_manifest_classification)
+# plugin_manifest_classification was removed with the plugin system: its only
+# subject was src/util/PluginLocations.h, which went away with the plugins.
 add_subdirectory(protected_paths)
 
 find_package(Python3 REQUIRED COMPONENTS Interpreter)
 add_test(NAME TrustedTimeTimezone COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/test_trusted_time.py)
 
-add_test(NAME WebServerStartupFailure COMMAND ${Python3_EXECUTABLE} ${REPO_ROOT}/scripts/tests/test_webserver_startup_failure.py)
-
-add_test(NAME WifiStartupFailure COMMAND ${Python3_EXECUTABLE} ${REPO_ROOT}/scripts/tests/test_wifi_startup_failure.py)
-
+# WebServerStartupFailure / WifiStartupFailure / TlsMemoryPreflight were removed
+# with the network stack (src/network/**, the WiFi + web-server activities and
+# the WeRead lib). FontPreloadFlow below is unrelated and stays.
 add_test(NAME FontPreloadFlow
   COMMAND ${Python3_EXECUTABLE} ${REPO_ROOT}/test/reader_font_preview/test_preload_flow.py)
-add_test(NAME TlsMemoryPreflight COMMAND ${Python3_EXECUTABLE} ${REPO_ROOT}/scripts/tests/test_tls_memory_preflight.py)
-add_test(NAME AirPageDisplayRetry COMMAND ${Python3_EXECUTABLE} ${REPO_ROOT}/scripts/tests/test_airpage_display_retry.py)
+add_test(NAME ImageBlockMemoryFailure COMMAND ${Python3_EXECUTABLE} ${REPO_ROOT}/scripts/tests/test_image_block_memory_failure.py)
 
 add_test(NAME FontPreloadRefresh COMMAND ${Python3_EXECUTABLE} ${REPO_ROOT}/scripts/tests/test_font_preload_refresh.py)
 add_test(NAME FirmwareUpdateRefresh COMMAND ${Python3_EXECUTABLE} ${REPO_ROOT}/scripts/tests/test_firmware_update_refresh.py)

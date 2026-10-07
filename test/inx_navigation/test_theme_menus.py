@@ -132,17 +132,10 @@ int main() {
    const auto before=SETTINGS;
    if (upstream) s.reference(); else s.rebuildSettingsLists();
    assert(SETTINGS==before);
-   if (!upstream) {
-    int dateTimeEntries=0;
-    for (const auto& row:s.systemSettings) {
-     assert(row.nameId != StrId::STR_CLOCK);
-     if (row.nameId == StrId::STR_DATE_AND_TIME) {
-      ++dateTimeEntries;
-      assert(row.action == SettingAction::ClockSettings);
-     }
-    }
-    assert(dateTimeEntries == 1);
-   }
+   // The Date & Time system row was removed with the clock/date feature, and
+   // the StrId stub below is generated from the ids the production code still
+   // references -- so STR_DATE_AND_TIME and STR_CLOCK no longer exist to
+   // assert on. The menu-shape checks below cover what remains.
    int category=0;
    for (auto* rows : {&s.displaySettings,&s.readerSettings,&s.controlsSettings,&s.systemSettings}) {
     std::printf("MENU %d %d %d\\n",flags,theme,category++);

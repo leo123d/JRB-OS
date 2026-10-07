@@ -276,11 +276,10 @@ bool ActivityManager::handleHomeStandbyInput() {
   // The bottom tab bar Home is now a real tab (MainTab::Home), so standby is
   // reachable from the Home tab's Back binding as well as the Recent tab's.
   const bool eligible =
-      currentActivity && (currentActivity->isHomeActivity() ||
-                          (currentActivity->usesMainTabBar() &&
-                           (currentActivity->mainTab() == MainTab::Home ||
-                            currentActivity->mainTab() == MainTab::Recent) &&
-                           mainTabFocus == MainTabFocus::Tabs));
+      currentActivity && (currentActivity->isHomeActivity() || (currentActivity->usesMainTabBar() &&
+                                                                (currentActivity->mainTab() == MainTab::Home ||
+                                                                 currentActivity->mainTab() == MainTab::Recent) &&
+                                                                mainTabFocus == MainTabFocus::Tabs));
   if (!eligible || !SETTINGS.standbyShortcutEnabled) {
     resetHomeStandbyInput();
     return false;
@@ -399,8 +398,13 @@ bool ActivityManager::handleMainTabInput() {
         return true;
       }
 
-      // Recent's Back is owned by the shared home Standby handler.
-      if (currentTab == MainTab::Recent) return false;
+      // Recent's and Home's Back are owned by the shared home Standby handler.
+      // Returning `isPressed(Back)` here instead would consume both the press
+      // and the release for the Home tab, and loop() returns as soon as this
+      // returns true -- so handleHomeStandbyInput() would never run and the
+      // device could not be put to sleep from Home's Back binding, which is
+      // exactly what that handler's eligibility list promises.
+      if (currentTab == MainTab::Recent || currentTab == MainTab::Home) return false;
       if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
         goToMainTab(MainTabs::backTarget(currentTab));
         return true;
@@ -450,7 +454,6 @@ void ActivityManager::replaceActivity(std::unique_ptr<Activity>&& newActivity) {
 
 void ActivityManager::goToSettings() { replaceActivityWith<SettingsActivity>(); }
 
-
 void ActivityManager::goToFileBrowser(std::string path) { replaceActivityWith<FileBrowserActivity>(std::move(path)); }
 
 void ActivityManager::goToRecentBooks() { replaceActivityWith<RecentBooksActivity>(); }
@@ -467,7 +470,11 @@ void ActivityManager::goToMainTab(const MainTab tab) {
       goToInxRecent();
       return;
     case MainTab::Library:
-      goToFileBrowser();
+      // PaperRead spec S-3: the Library tab is the book cover grid (filter
+      // chips + 3x2 covers), which is LibraryListActivity reading the CLX1
+      // index. The raw SD-card file browser stays reachable from the home
+      // screen's library action and from within the reader.
+      goToLibrary();
       return;
     case MainTab::Settings:
       goToSettings();
@@ -542,20 +549,6 @@ void ActivityManager::goHome(HomeMenuItem initialMenuItem) {
   replaceActivityWith<HomeActivity>(initialMenuItem);
 }
 void ActivityManager::goToCrashReport() { replaceActivityWith<CrashActivity>(); }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 #ifdef ENABLE_CHINESE_VERSION
 #endif

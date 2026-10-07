@@ -169,8 +169,9 @@ print(f'Production boolean controls: {len(scenes)} theme/state/selection/orienta
       'keyboard checkboxes, caller overrides and one-action touch routing pass')
 
 # Exercise the real per-page typography guards as well as their checkbox data.
-paths = ['reader/EpubReaderMenuActivity.cpp', 'settings/LanguageSelectActivity.cpp',
-         'settings/KOReaderSettingsActivity.cpp', 'settings/OpdsSettingsActivity.cpp']
+# KOReaderSettingsActivity and OpdsSettingsActivity went away with the KOReader
+# sync and OPDS features, so only the surviving pages are inspected here.
+paths = ['reader/EpubReaderMenuActivity.cpp', 'settings/LanguageSelectActivity.cpp']
 for path in paths:
     text = (ROOT / 'src/activities' / path).read_text()
     if path == 'reader/EpubReaderMenuActivity.cpp':

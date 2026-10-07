@@ -12,7 +12,9 @@ std::vector<uint8_t> readerFontPointSizes(const SdCardFontRegistry* registry, co
       if (!sizes.empty()) return sizes;
     }
   }
-  return {std::begin(BUILTIN_READER_POINT_SIZES), std::end(BUILTIN_READER_POINT_SIZES)};
+  size_t count = 0;
+  const uint8_t* builtin = builtinReaderPointSizes(count);
+  return {builtin, builtin + count};
 }
 
 uint8_t snapToNearestPointSize(const uint8_t* sizes, const size_t count, const uint8_t pt) {

@@ -10,26 +10,23 @@ ROOT = Path(__file__).resolve().parents[2]
 
 class FirmwareUpdateRefreshTest(unittest.TestCase):
     def test_flash_ordering_failure_paths_and_complete_frames(self):
-        ota = (ROOT / 'src/activities/settings/OtaUpdateActivity.cpp').read_text()
         sd = (ROOT / 'src/activities/settings/SdFirmwareUpdateActivity.cpp').read_text()
-        updater = (ROOT / 'src/network/OtaUpdater.cpp').read_text()
-        flasher = (ROOT / 'src/network/FirmwareFlasher.cpp').read_text()
+        flasher = (ROOT / 'src/ota/FirmwareFlasher.cpp').read_text()
         theme = (ROOT / 'src/components/themes/BaseTheme.cpp').read_text()
+        # The network OTA path (src/network/OtaUpdater.cpp,
+        # src/activities/settings/OtaUpdateActivity.cpp) was removed together with
+        # the network stack. The SD-card update survives and still shares
+        # firmware_flash with the (now deleted) OTA entry point.
         production = '\n'.join((
             method(theme, 'int BaseTheme::measureProgressBarHeight('),
             method(theme, 'int BaseTheme::drawProgressBar('),
-            method(ota, 'void OtaUpdateActivity::render('),
             method(sd, 'void SdFirmwareUpdateActivity::render('),
-            method(ota, 'void OtaUpdateActivity::runUpdateInstall('),
             method(sd, 'void SdFirmwareUpdateActivity::onConfirmationResult('),
             method(sd, 'void SdFirmwareUpdateActivity::performUpdate('),
-            method(updater, 'OtaUpdater::OtaUpdaterError OtaUpdater::installUpdate('),
             'namespace firmware_flash {\n' + method(flasher, 'Result flashFromSdPath(') + '\n}',
         ))
         keys = sorted(set(re.findall(r'\bSTR_[A-Z_]+\b', production)))
-        constants = re.search(r'constexpr unsigned int PROGRESS_REFRESH_STEP_PERCENT = \d+;', ota).group()
-        sd_constants = re.search(r'constexpr unsigned int PROGRESS_REFRESH_STEP_PERCENT = \d+;', sd).group()
-        self.assertEqual(constants, sd_constants)
+        constants = re.search(r'constexpr unsigned int PROGRESS_REFRESH_STEP_PERCENT = \d+;', sd).group()
         # Reuse the production SD chunk/erase sizes, not a rewritten writer loop.
         flash_constants = '\n'.join(re.findall(r'constexpr size_t (?:SEC|BLK|CHUNK) = [^;]+;', flasher))
         program = HARNESS + '\nenum { ' + ', '.join(keys) + ' };\n' + constants + '\n'
@@ -38,31 +35,6 @@ class FirmwareUpdateRefreshTest(unittest.TestCase):
 int main() {
   for (bool tabs : {false, true}) {
     GUI.tabs = tabs;
-    for (Failure failure : {Failure::None, Failure::Download, Failure::Write,
-                            Failure::Verify, Failure::Switch, Failure::WrongChip,
-                            Failure::WrongBoard}) {
-      reset(failure);
-      OtaUpdateActivity activity;
-      activity.updater.totalSize = 1000;
-      activity.runUpdateInstall();
-      assert(!refreshPending && !locked && activity.renderer.clears == activity.renderer.frames);
-      if (failure == Failure::None) {
-        assert(activity.state == OtaUpdateActivity::State::ShuttingDown && switches == 1);
-        assert((activity.renderer.percentages == std::vector<int>{0,10,20,55,65,99,100}));
-        assert(activity.renderer.text.back() == tr(STR_AUTO_RESTART_HINT));
-      } else {
-        assert(activity.state == OtaUpdateActivity::State::Failed && switches == 0 && restarts == 0);
-        assert(activity.deferred && fontReloads == 1);
-        const int before = activity.renderer.frames;
-        activity.requestUpdateAndWait();
-        assert(activity.renderer.frames == before + 1);
-        assert(activity.failedDetail == ((failure == Failure::WrongChip || failure == Failure::WrongBoard)
-                                        ? tr(STR_FIRMWARE_WRONG_DEVICE) : nullptr));
-      }
-      if (failure == Failure::Download || failure == Failure::Write ||
-          failure == Failure::WrongChip || failure == Failure::WrongBoard) assert(aborts == 1);
-    }
-
     for (Failure failure : {Failure::None, Failure::Read, Failure::Erase,
                             Failure::Write, Failure::Verify, Failure::Switch}) {
       reset(failure);
@@ -79,24 +51,8 @@ int main() {
       }
     }
 
-    // Repeated external render requests must also submit complete frames. The
-    // live updater counters deliberately disagree with the protected snapshot.
+    // Repeated external render requests must also submit complete frames.
     reset(Failure::None);
-    OtaUpdateActivity activity;
-    activity.state = OtaUpdateActivity::State::UpdateInProgress;
-    activity.updater.processedSize = 999;
-    activity.updater.totalSize = 1000;
-    for (auto [done, total, percent] : {Sample{0,0,0}, Sample{19,100,19},
-                                     Sample{110,100,100}, Sample{UINT32_MAX,UINT32_MAX,100}}) {
-      activity.progressBytes = done;
-      activity.progressTotalBytes = total;
-      for (int repeat = 0; repeat < 2; ++repeat) {
-        activity.requestUpdateAndWait();
-        assert(activity.renderer.percentages.back() == percent);
-        assert(activity.renderer.text.back() == std::to_string(done) + " / " + std::to_string(total));
-        assert(activity.renderer.clears == activity.renderer.frames);
-      }
-    }
     SdFirmwareUpdateActivity sdActivity;
     sdActivity.state = SdFirmwareUpdateActivity::State::UPDATING;
     for (auto [done, total, percent] : {Sample{0,0,0}, Sample{19,100,19}, Sample{110,100,100},
@@ -111,25 +67,18 @@ int main() {
     }
   }
 
-  // Exercise both actual callbacks at boundaries the real transport may skip
-  // (duplicate reports, unknown totals, and values beyond the manifest size).
+  // Exercise the actual progress callback at boundaries the real transport may
+  // skip (duplicate reports, unknown totals, and values beyond the image size).
   reset(Failure::None);
-  OtaUpdateActivity otaActivity;
-  otaActivity.state = OtaUpdateActivity::State::UpdateInProgress;
   SdFirmwareUpdateActivity sdActivity;
   sdActivity.state = SdFirmwareUpdateActivity::State::UPDATING;
-  auto otaProgress = ''' + method(ota, '[](void* ctx)') + r''';
   auto sdProgress = ''' + method(sd, '[](size_t written, size_t total, void* ctx)') + r''';
   for (auto [done, total, count] : {Sample{20,0,0}, Sample{9,100,0}, Sample{10,100,1},
                                   Sample{10,100,1}, Sample{19,100,1}, Sample{20,100,2},
                                   Sample{55,100,3}, Sample{64,100,3}, Sample{65,100,4},
                                   Sample{99,100,5}, Sample{100,100,6}, Sample{110,100,6}}) {
-    otaActivity.updater.processedSize = done;
-    otaActivity.updater.totalSize = total;
-    otaProgress(&otaActivity);
     sdProgress(done, total, &sdActivity);
-    assert(otaActivity.renderer.frames == count && sdActivity.renderer.frames == count);
-    assert(otaActivity.progressBytes == done && otaActivity.progressTotalBytes == total);
+    assert(sdActivity.renderer.frames == count);
     assert(sdActivity.writtenBytes == done && sdActivity.firmwareSize == total);
   }
 }
@@ -372,7 +321,7 @@ namespace ota_boot {
 bool switchTo(const esp_partition_t* p) { return esp_ota_set_boot_partition(p)==ESP_OK; }
 }
 namespace firmware_flash {
-enum class Result { OK,NO_PARTITION,OPEN_FAIL,OOM,READ_FAIL,ERASE_FAIL,WRITE_FAIL,OTADATA_FAIL,BAD_CHIP,WRONG_BOARD,BAD_SHA };
+enum class Result { OK,OPEN_FAIL,TOO_SMALL,TOO_LARGE,BAD_MAGIC,BAD_SEGMENTS,BAD_CHECKSUM,BAD_SHA,BAD_CHIP,WRONG_BOARD,BAD_SIZE,NO_PARTITION,OOM,READ_FAIL,ERASE_FAIL,WRITE_FAIL,OTADATA_FAIL };
 using ProgressCb=void(*)(size_t,size_t,void*);
 const char* resultName(Result) { return "failure"; }
 uint16_t runningPartitionChipId() { return 0; }

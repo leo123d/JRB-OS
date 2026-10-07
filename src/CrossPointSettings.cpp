@@ -675,11 +675,16 @@ CrossPointSettings::StatusBarSpec CrossPointSettings::statusBarSpec() const {
   return spec;
 }
 
-ReaderRenderSpec CrossPointSettings::readerRenderSpec(const uint16_t viewportWidth,
-                                                      const uint16_t viewportHeight) const {
+ReaderRenderSpec CrossPointSettings::readerRenderSpec(const uint16_t viewportWidth, const uint16_t viewportHeight,
+                                                      const float fontAdvanceYRatio) const {
   ReaderRenderSpec spec;
   spec.fontId = getReaderFontId();
+#if FREEINK_DEVICE_READPICO
+  spec.lineCompression = getPaperReadLineCompression(fontAdvanceYRatio);
+#else
+  (void)fontAdvanceYRatio;
   spec.lineCompression = getReaderLineCompression();
+#endif
   spec.extraParagraphSpacing = extraParagraphSpacing;
   spec.firstLineIndent = firstLineIndent;
   spec.paragraphIndentSpaces = paragraphIndentSpaces;
@@ -744,6 +749,33 @@ float CrossPointSettings::getReaderLineCompression() const {
   }
 }
 
+// PaperRead spec §7: lh = round(fs * mult * 1.172). The face's own advanceY is
+// its FreeType-native line box (advanceY = ratio * fs), so the compression that
+// reproduces the spec is (1.172 * mult) / ratio. `mult` is the reader spacing
+// preset standing behind the four stored LINE_COMPRESSION slots.
+float CrossPointSettings::getPaperReadLineCompression(const float fontAdvanceYRatio) const {
+  if (fontAdvanceYRatio <= 0.0f) return getReaderLineCompression();
+  float mult = 1.6f;
+  switch (lineSpacing) {
+    case TIGHT:
+      mult = 1.4f;
+      break;
+    case WIDE:
+      mult = 1.8f;
+      break;
+    case EXTRA_WIDE:
+      mult = 2.0f;
+      break;
+    case NORMAL:
+    default:
+      mult = 1.6f;
+      break;
+  }
+  const float compression = (1.172f * mult) / fontAdvanceYRatio;
+  // Guard rails: never let a pathological face collapse or explode the layout.
+  return std::clamp(compression, 0.5f, 2.0f);
+}
+
 unsigned long CrossPointSettings::getSleepTimeoutMs() const {
   if (sleepTimeoutMinutes >= SLEEP_TIMEOUT_NEVER_MINUTES) return 0UL;
   const uint8_t minutes =
@@ -790,8 +822,11 @@ void CrossPointSettings::clearSdFontFamily() {
   sdFontFlashPreload = 0;
   fontFamily = NOTOSANS;
 #ifndef CROSSMUX_UI_PROFILE_HIGH_DPI
-  fontPointSize =
-      snapToNearestPointSize(BUILTIN_READER_POINT_SIZES, std::size(BUILTIN_READER_POINT_SIZES), fontPointSize);
+  {
+    size_t count = 0;
+    const uint8_t* sizes = builtinReaderPointSizes(count);
+    fontPointSize = snapToNearestPointSize(sizes, count, fontPointSize);
+  }
 #endif
   saveToFile();
 }
@@ -804,12 +839,28 @@ int CrossPointSettings::getReaderFontId() const {
     // Fall through to built-in if SD font not found
   }
 
-  // A built-in family only exists at BUILTIN_READER_POINT_SIZES, so a size
-  // carried over from an SD family may not be one of them. ensureLoaded()
-  // normally persists the snap; snap again here (without allocating — this runs
-  // in the page render loop) so rendering is correct even before it has run.
-  const uint8_t pt =
-      snapToNearestPointSize(BUILTIN_READER_POINT_SIZES, std::size(BUILTIN_READER_POINT_SIZES), fontPointSize);
+  // A built-in family only exists at the built-in point sizes, so a size carried
+  // over from an SD family may not be one of them. ensureLoaded() normally
+  // persists the snap; snap again here (without allocating — this runs in the
+  // page render loop) so rendering is correct even before it has run.
+  size_t sizeCount = 0;
+  const uint8_t* sizeTable = builtinReaderPointSizes(sizeCount);
+  const uint8_t pt = snapToNearestPointSize(sizeTable, sizeCount, fontPointSize);
+
+#if FREEINK_DEVICE_READPICO
+  // JRB OS ships MiSans at both built-in sizes, so the reader honours the
+  // selected point size instead of collapsing to one 12pt fallback. An SD
+  // .cpfont still wins above (the early return), so installing a family keeps
+  // its own faces and sizes.
+  switch (pt) {
+    case 20:
+      return MISANS_20_FONT_ID;
+    case 12:
+    default:
+      return MISANS_12_FONT_ID;
+  }
+#endif
+
   if (UiHighDpiProfile::enabled) return UiHighDpiProfile::reader12FontId;
   const bool sans = (fontFamily == NOTOSANS);
   switch (pt) {

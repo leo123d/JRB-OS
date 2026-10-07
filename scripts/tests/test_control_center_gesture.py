@@ -92,10 +92,12 @@ int main() {
     const bool opens = std::string(name) != "FrontlightPanel";
     check({.name = name}, {.light = true}, opens, !opens);
   }
-  for (const char* name : {"Home", "FileBrowser", "Settings", "NetworkModeSelection", "InxRecent", "EpubReader", "FrontlightPanel"}) {
+  for (const char* name : {"Home", "FileBrowser", "Settings", "InxRecent", "EpubReader", "FrontlightPanel"}) {
     const std::string page(name);
-    const bool opens = page == "Home" || page == "FileBrowser" ||
-                       page == "Settings" || page == "NetworkModeSelection";
+    // The status-bar shortcut is wired for the three header-less menu pages; the
+    // PaperRead build removed NetworkModeSelection with the network stack, so it
+    // is no longer part of the dispatch contract.
+    const bool opens = page == "Home" || page == "FileBrowser" || page == "Settings";
     check({.name = name}, {.topSwipe = false, .tap = true}, opens, !opens);
   }
   for (const char* name : {"InxRecent", "FileBrowser", "AppsMenu", "Settings", "ReadingStats"}) {

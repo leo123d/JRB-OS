@@ -13,6 +13,7 @@
 #include <Utf8.h>
 
 #include <algorithm>
+#include <cstring>
 #include <string_view>
 
 #include "../Memory/Memory.h"
@@ -932,6 +933,9 @@ int GfxRenderer::getTextWidth(const int fontId, const char* text, const EpdFontF
   const auto fontIt = fontMap.find(resolvedFontId);
   if (fontIt == fontMap.end()) {
     LOG_ERR("GFX", "Font %d not found", resolvedFontId);
+#ifdef JRB_FONT_DIAG
+    LOG_ERR("GFX", "  DIAG resolved caller=%p text='%.20s'", __builtin_return_address(0), text);
+#endif
     return 0;
   }
 
@@ -993,6 +997,9 @@ void GfxRenderer::drawText(const int fontId, const int x, const int y, const cha
   const auto fontIt = fontMap.find(resolvedFontId);
   if (fontIt == fontMap.end()) {
     LOG_ERR("GFX", "Font %d not found", resolvedFontId);
+#ifdef JRB_FONT_DIAG
+    LOG_ERR("GFX", "  DIAG drawText caller=%p text='%.24s'", __builtin_return_address(0), renderedText);
+#endif
     return;
   }
   const auto& font = fontIt->second;
@@ -2543,6 +2550,9 @@ int GfxRenderer::getSpaceWidth(int fontId, const EpdFontFamily::Style style) con
   const auto fontIt = fontMap.find(fontId);
   if (fontIt == fontMap.end()) {
     LOG_ERR("GFX", "Font %d not found", fontId);
+#ifdef JRB_FONT_DIAG
+    LOG_ERR("GFX", "  DIAG getSpaceWidth caller=%p", __builtin_return_address(0));
+#endif
     return 0;
   }
 
@@ -2647,6 +2657,9 @@ int GfxRenderer::getTextAdvanceX(int fontId, const char* text, EpdFontFamily::St
   const auto fontIt = fontMap.find(resolvedFontId);
   if (fontIt == fontMap.end()) {
     LOG_ERR("GFX", "Font %d not found", resolvedFontId);
+#ifdef JRB_FONT_DIAG
+    LOG_ERR("GFX", "  DIAG resolved caller=%p text='%.20s'", __builtin_return_address(0), text);
+#endif
     return 0;
   }
 
@@ -2691,6 +2704,9 @@ int GfxRenderer::getFontAscenderSize(int fontId) const {
   const auto fontIt = fontMap.find(fontId);
   if (fontIt == fontMap.end()) {
     LOG_ERR("GFX", "Font %d not found", fontId);
+#ifdef JRB_FONT_DIAG
+    LOG_ERR("GFX", "  DIAG getFontAscenderSize caller=%p", __builtin_return_address(0));
+#endif
     return 0;
   }
 
@@ -2703,6 +2719,9 @@ int GfxRenderer::getLineHeight(int fontId) const {
   const auto fontIt = fontMap.find(fontId);
   if (fontIt == fontMap.end()) {
     LOG_ERR("GFX", "Font %d not found", fontId);
+#ifdef JRB_FONT_DIAG
+    LOG_ERR("GFX", "  DIAG getLineHeight caller=%p", __builtin_return_address(0));
+#endif
     return 0;
   }
 
@@ -2721,6 +2740,9 @@ int GfxRenderer::getTextHeight(int fontId) const {
   const auto fontIt = fontMap.find(fontId);
   if (fontIt == fontMap.end()) {
     LOG_ERR("GFX", "Font %d not found", fontId);
+#ifdef JRB_FONT_DIAG
+    LOG_ERR("GFX", "  DIAG getTextHeight caller=%p", __builtin_return_address(0));
+#endif
     return 0;
   }
   return fontIt->second.getData(EpdFontFamily::REGULAR)->ascender;
@@ -2739,6 +2761,9 @@ void GfxRenderer::drawTextRotated90CW(const int fontId, const int x, const int y
   const auto fontIt = fontMap.find(resolvedFontId);
   if (fontIt == fontMap.end()) {
     LOG_ERR("GFX", "Font %d not found", resolvedFontId);
+#ifdef JRB_FONT_DIAG
+    LOG_ERR("GFX", "  DIAG drawTextRot caller=%p text='%.24s'", __builtin_return_address(0), text);
+#endif
     return;
   }
 

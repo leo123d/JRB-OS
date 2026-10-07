@@ -184,6 +184,18 @@ EpdFontFamily cjk10FontFamily(&cjk10Font);
 EpdFont cjk12Font(&notosans_cjk_12);
 EpdFontFamily cjk12FontFamily(&cjk12Font);
 
+#if FREEINK_DEVICE_READPICO
+// JRB OS embedded reader faces (MiSans, GB2312 Lv1+Lv2). These make the 12pt
+// fallback and the 20pt default body size render fully offline, without an
+// SD-card .cpfont. Both are DEFLATE-compressed 2-bit bitmaps, so the
+// decompressor must be ready before either is drawn (see fontDecompressor
+// init in setup(), which runs before any activity renders).
+EpdFont misans12Font(&misans_cjk_12);
+EpdFontFamily misans12FontFamily(&misans12Font);
+EpdFont misans20Font(&misans_cjk_20);
+EpdFontFamily misans20FontFamily(&misans20Font);
+#endif  // FREEINK_DEVICE_READPICO
+
 // Chinese chess piece glyphs (subset CJK font, 14 characters at 16pt).
 EpdFont chineseChessPieceFont(&chinese_chess_16);
 EpdFontFamily chineseChessPieceFontFamily(&chineseChessPieceFont);
@@ -556,6 +568,23 @@ bool setupDisplayAndFonts(bool seamless = false, bool logSdFontLoadHeap = false)
   renderer.setFallbackFont(CJK_UI_12_FONT_ID, kRtlFontId);
 #endif
   renderer.insertFont(CHINESE_CHESS_FONT_ID, chineseChessPieceFontFamily);
+
+#if FREEINK_DEVICE_READPICO
+  // JRB OS embedded reader faces. MISANS_12 backs the 12pt reader size and the
+  // full GB2312 Chinese UI fallback (Noto's 3500-char subset misses Lv2 chars,
+  // so any Lv2 glyph in a UI string would otherwise fall through to a tofu box).
+  // MISANS_20 backs the 20pt default body size.
+  renderer.insertFont(MISANS_12_FONT_ID, misans12FontFamily);
+  renderer.insertFont(MISANS_20_FONT_ID, misans20FontFamily);
+  // Chinese UI fallback now resolves to the full-coverage MiSans face. Keep the
+  // chain pointing at CJK_UI_12 (Noto) as a last resort so a MiSans miss still
+  // degrades to something readable rather than nothing.
+  renderer.setFallbackFont(CJK_UI_12_FONT_ID, MISANS_12_FONT_ID);
+#ifdef CROSSMUX_UI_PROFILE_HIGH_DPI
+  renderer.setFallbackFont(MISANS_12_FONT_ID, kRtlFontId);
+#endif
+  renderer.setFallbackFont(MISANS_20_FONT_ID, MISANS_12_FONT_ID);
+#endif
 
   // Discover and load SD card fonts
   if (logSdFontLoadHeap) {

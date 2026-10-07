@@ -451,11 +451,34 @@ void InxTheme::drawMainTabBar(const GfxRenderer& renderer, const Rect rect, cons
   const int labelFont = UiHighDpiProfile::enabled ? UI_12_FONT_ID : SMALL_FONT_ID;
   // Spec S-1.9: 30x30 glyph on ~300 PPI panels; the high-DPI preset ships the
   // same vector at 56 px.
+  //
+  // The drawn size MUST equal the asset size: GfxRenderer::drawIcon() derives
+  // its row stride from `size` (rowBytes = (size + 7) / 8), so handing it any
+  // other value reads the wrong bytes and paints vertical noise instead of the
+  // glyph. Never scale this.
   constexpr int kStdTabIconSize = 30;
   const int iconSize = UiHighDpiProfile::enabled ? kIconSize : kStdTabIconSize;
   constexpr int kTabStackGap = 5;
-  const int stackHeight = iconSize + kTabStackGap + renderer.getLineHeight(labelFont);
-  const int stackTop = rect.y + 1 + std::max(0, (rect.height - 1 - stackHeight) / 2);
+  const int lineHeight = renderer.getLineHeight(labelFont);
+  // drawText() places the glyph ink *below* the y it is handed, and the ink box
+  // is far shorter than the line box: the CJK UI fallback on this profile
+  // (notosans_cjk_16, ascender 39) draws a 30 px full-width glyph whose top sits
+  // 27 px above the baseline, i.e. the ink lands [11, 41] px below that y.
+  // Reserving the 45 px line box for the label therefore pushes it past the
+  // bottom edge of the 96 px bar and the strokes read as cut off. Lay the bar
+  // out against the ink box instead.
+  constexpr int kTabLabelInkTop = 11;
+  constexpr int kTabLabelInkHeight = 30;
+  const int labelInkTop = UiHighDpiProfile::enabled ? kTabLabelInkTop : 0;
+  const int labelInkHeight = UiHighDpiProfile::enabled ? kTabLabelInkHeight : lineHeight;
+
+  const int innerTop = rect.y + 1;
+  const int innerBottom = rect.y + rect.height - 1;  // the last row of the bar
+  const int innerHeight = std::max(0, innerBottom - innerTop);
+  const int stackHeight = iconSize + kTabStackGap + labelInkHeight;
+  const int stackTop = innerTop + std::max(0, (innerHeight - stackHeight) / 2);
+  const int labelY =
+      std::min(stackTop + iconSize + kTabStackGap - labelInkTop, innerBottom - labelInkHeight - labelInkTop);
 
   for (int index = 0; index < count; ++index) {
     const MainTab tab = MainTabs::values[index];
@@ -475,7 +498,6 @@ void InxTheme::drawMainTabBar(const GfxRenderer& renderer, const Rect rect, cons
 
     const char* label = tabLabel(tab);
     if (label && *label) {
-      const int labelY = stackTop + iconSize + kTabStackGap;
       const int textWidth = renderer.getTextWidth(labelFont, label);
       const int textX = left + std::max(0, (right - left - textWidth) / 2);
       const GfxRenderer::ClipScope clip(renderer, left, rect.y + 1, right - left, rect.height - 1);

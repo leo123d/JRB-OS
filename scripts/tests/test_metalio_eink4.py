@@ -462,8 +462,8 @@ int main() {
 }
 ''')
             subprocess.run(["c++", "-std=c++17", "-Wall", "-Wextra", "-Werror",
-                            "-I" + str(tmp), "-I" + str(ROOT / "src/network"),
-                            str(ROOT / "src/network/FirmwareBoardTag.cpp"), str(tmp / "test.cpp"),
+                            "-I" + str(tmp), "-I" + str(ROOT / "src/ota"),
+                            str(ROOT / "src/ota/FirmwareBoardTag.cpp"), str(tmp / "test.cpp"),
                             "-o", str(tmp / "test")], check=True)
             subprocess.run([str(tmp / "test")], check=True)
 

@@ -597,7 +597,11 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   // viewport is renderer/orientation-derived, so the caller supplies it —
   // passing it in keeps a spec from ever existing in a half-filled state.
   // Unlocked for the same reason as statusBarSpec(); see the note above.
-  ReaderRenderSpec readerRenderSpec(uint16_t viewportWidth, uint16_t viewportHeight) const;
+  // `fontAdvanceYRatio` is the resolved face's advanceY/fontSize ratio (0 =
+  // unknown). readpico uses it to honour the PaperRead line-height calibration
+  // (spec §7) regardless of which face is loaded.
+  ReaderRenderSpec readerRenderSpec(uint16_t viewportWidth, uint16_t viewportHeight,
+                                    float fontAdvanceYRatio = 0.0f) const;
 
   static const char* getFilePath() { return "/.crosspoint/settings.json"; }
   // Keep the UI language and service region in sync; preserve app visibility.
@@ -616,6 +620,10 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
 
  public:
   float getReaderLineCompression() const;
+  // PaperRead spec §7: given the resolved face's advanceY/fontSize ratio,
+  // return the compression that lands lh on round(fs * mult * 1.172), where
+  // the multiplier is the reader's current spacing preset (1.4/1.6/1.8/2.0).
+  float getPaperReadLineCompression(float fontAdvanceYRatio) const;
   unsigned long getSleepTimeoutMs() const;
   int getRefreshFrequency() const;
   // Daily reading goal in milliseconds, derived from dailyGoalTarget.

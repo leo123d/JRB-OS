@@ -62,7 +62,11 @@ class HomeActivity final : public Activity {
 #if FREEINK_DEVICE_READPICO
   // PaperRead spec S-1 home. Fixed-geometry page; see HomeActivity.cpp.
   void renderPaperReadHome();
-  void drawPaperReadCover(const RecentBook& book, const Rect& rect, int fontSize);
+  // fontId: the registered face used to draw the spine. fontPt: its nominal
+  // pixel size, kept only for geometry (centring / step). Do NOT pass the pt
+  // value as the font id: it is a size, not a font map key, and drawing with
+  // it silently logs "Font 20 not found" and renders nothing.
+  void drawPaperReadCover(const RecentBook& book, const Rect& rect, int fontId, int fontPt);
   static int paperreadDots(const GfxRenderer& renderer, int x, int y, int percent, int count);
   Rect heroButtonRect;
   std::vector<Rect> cardRects;

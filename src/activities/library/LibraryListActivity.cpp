@@ -15,11 +15,16 @@
 
 #include "CrossPointSettings.h"
 #include "MappedInputManager.h"
+#include "ReadingStatsStore.h"
 #include "RecentBooksStore.h"
 #include "activities/util/ConfirmationActivity.h"
 #include "activities/util/KeyboardEntryActivity.h"
 #include "components/UIScale.h"
 #include "components/UITheme.h"
+#if FREEINK_DEVICE_READPICO
+#include "components/themes/paperread/PaperReadUi.h"
+#include "util/BookCoverLoader.h"
+#endif
 #include "components/icons/headerIcons.h"
 #include "components/icons/listIcons.h"
 #include "components/icons/search32.h"
@@ -713,6 +718,10 @@ bool LibraryListActivity::rowTextFor(const int entry, std::string& title, std::s
 }
 
 bool LibraryListActivity::handleCustomInput() {
+#if FREEINK_DEVICE_READPICO
+  handlePaperReadInput();
+  return true;  // The S-3 grid owns its own input for this frame.
+#endif
   if (optionPopup.handleInput(mappedInput, [this] { requestUpdate(); })) return true;
 
   if (lockNextConfirmRelease && mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
@@ -1028,9 +1037,339 @@ void LibraryListActivity::drawHoldHelp() const {
 // OptionPopup is a self-contained modal: it owns the whole frame (hints
 // included) whenever it is up, mirroring the FileBrowser pattern.
 void LibraryListActivity::render(RenderLock&& lock) {
+#if FREEINK_DEVICE_READPICO
+  if (renderPaperReadLibrary()) return;
+#endif
   if (optionPopup.processRender(renderer, mappedInput)) return;
   UiTabListActivity::render(std::move(lock));
 }
+
+#if FREEINK_DEVICE_READPICO
+// ---------------------------------------------------------------------------
+// PaperRead spec S-3: library cover grid.
+//
+// Header: back arrow + "书库" 21px, with a grid-glyph on the right.
+// Chips : 全部(N) / 在读(N) / 未读(N) on one row at y117.
+// Rule  : 1px grey at y196.
+// Grid  : 3 columns x 2 rows, cards 196x276, top y225.
+// Pager : rule y1044, labels centred on y1094.
+// Tabs  : shared bottom bar with "书库" selected.
+// ---------------------------------------------------------------------------
+int LibraryListActivity::paperreadFilteredCount() {
+  const int rows = bookRowCount();
+  if (paperreadFilter == PaperReadFilter::All) return rows;
+  int n = 0;
+  for (int entry = 0; entry < rows; ++entry) {
+    std::string title, path;
+    uint8_t percent = 0;
+    bool completed = false;
+    if (!paperreadEntryText(entry, title, percent, completed, &path)) continue;
+    (void)path;
+    if (paperreadFilter == PaperReadFilter::Reading) {
+      if (percent > 0 && !completed) ++n;
+    } else if (paperreadFilter == PaperReadFilter::Unread) {
+      if (percent == 0) ++n;
+    }
+  }
+  return n;
+}
+
+bool LibraryListActivity::paperreadEntryText(const int entry, std::string& title, uint8_t& percent, bool& completed,
+                                             std::string* pathOut) {
+  std::string author;
+  if (!rowTextFor(entry, title, author)) return false;
+
+  // Resolve the on-card path for the stats lookup; rowTextFor only gives text.
+  std::string path;
+  if (entry < pinnedCount()) {
+    const auto& books = RECENT_BOOKS.getBooks();
+    if (entry >= 0 && entry < static_cast<int>(books.size())) path = books[static_cast<size_t>(entry)].path;
+  } else if (index.isOpen()) {
+    const uint16_t ordinal = index.ordinalForRow(sortOrder, static_cast<uint16_t>(rowFor(entry)));
+    library::ClixRecord record{};
+    if (ordinal != 0xFFFF && index.readRecord(ordinal, record)) index.readPath(record, path);
+  }
+  if (pathOut != nullptr) *pathOut = path;
+
+  const ReadingBookStats* stats = path.empty() ? nullptr : READING_STATS.findMatchingBookForPath(path, title, author);
+  percent = stats ? stats->lastProgressPercent : 0;
+  completed = stats != nullptr && stats->completed;
+  return true;
+}
+
+bool LibraryListActivity::renderPaperReadLibrary() {
+  // The option popup and keyboard still own the frame when they are up.
+  if (optionPopup.processRender(renderer, mappedInput)) return true;
+
+  renderer.clearScreen();
+
+  // Fixed header glyphs: back arrow (drawn by PaperReadUi) + grid toggle.
+  PaperReadUi::drawHeader(renderer, tr(STR_LIBRARY));
+
+  const int total = bookRowCount();
+
+  // --- Filter chips -------------------------------------------------------
+  char allLabel[32];
+  char readingLabel[32];
+  char unreadLabel[32];
+  std::snprintf(allLabel, sizeof(allLabel), tr(STR_FILTER_ALL_FMT), static_cast<unsigned>(total));
+  std::snprintf(readingLabel, sizeof(readingLabel), tr(STR_FILTER_READING_FMT), 0U);
+  std::snprintf(unreadLabel, sizeof(unreadLabel), tr(STR_FILTER_UNREAD_FMT), 0U);
+  // Second pass for the two derived counts (rowTextFor is not free).
+  int readingCount = 0;
+  int unreadCount = 0;
+  for (int entry = 0; entry < total; ++entry) {
+    std::string title;
+    uint8_t percent = 0;
+    bool completed = false;
+    if (!paperreadEntryText(entry, title, percent, completed)) continue;
+    if (percent > 0 && !completed) ++readingCount;
+    if (percent == 0) ++unreadCount;
+  }
+  std::snprintf(readingLabel, sizeof(readingLabel), tr(STR_FILTER_READING_FMT), static_cast<unsigned>(readingCount));
+  std::snprintf(unreadLabel, sizeof(unreadLabel), tr(STR_FILTER_UNREAD_FMT), static_cast<unsigned>(unreadCount));
+
+  const char* labels[3] = {allLabel, readingLabel, unreadLabel};
+  const bool active[3] = {paperreadFilter == PaperReadFilter::All, paperreadFilter == PaperReadFilter::Reading,
+                          paperreadFilter == PaperReadFilter::Unread};
+  int chipX = PaperReadUi::kSideMargin;
+  for (int i = 0; i < 3; ++i) {
+    PaperReadUi::drawChip(renderer, chipX, PaperReadUi::kFilterTop, PaperReadUi::kFilterHeight, labels[i], active[i]);
+    chipX += PaperReadUi::chipWidth(renderer, labels[i]) + PaperReadUi::kFilterGap;
+  }
+
+  // --- Separator ----------------------------------------------------------
+  renderer.drawLine(PaperReadUi::kSideMargin, PaperReadUi::kFilterSeparatorY,
+                    PaperReadUi::kScreenWidth - PaperReadUi::kSideMargin - 1, PaperReadUi::kFilterSeparatorY, false);
+
+  // --- Cover grid ---------------------------------------------------------
+  const int filtered = paperreadFilteredCount();
+  constexpr int kCellsPerPage = 6;  // 3 columns x 2 rows
+  const int pageCount = std::max(1, (filtered + kCellsPerPage - 1) / kCellsPerPage);
+  if (paperreadPage >= pageCount) paperreadPage = pageCount - 1;
+  if (paperreadPage < 0) paperreadPage = 0;
+
+  const int start = paperreadPage * kCellsPerPage;
+  // Filtered-entry ordinal -> original entry index (single pass, reused for
+  // both the grid and the filtered index).
+  int shown = 0;
+  int slot = 0;
+  for (int entry = 0; entry < total && slot < kCellsPerPage; ++entry) {
+    std::string title;
+    uint8_t percent = 0;
+    bool completed = false;
+    if (!paperreadEntryText(entry, title, percent, completed)) continue;
+    if (paperreadFilter == PaperReadFilter::Reading) {
+      if (!(percent > 0 && !completed)) continue;
+    } else if (paperreadFilter == PaperReadFilter::Unread) {
+      if (percent != 0) continue;
+    }
+    if (shown < start) {
+      ++shown;
+      continue;
+    }
+    ++shown;
+
+    const int cx = PaperReadUi::gridCellX(slot);
+    const int cy = PaperReadUi::gridCellY(slot);
+
+    // Selection: a 2px ink frame (spec R-4 uses inverted blocks for rows; the
+    // grid keeps the cover and marks the cell instead).
+    if (slot == paperreadCursor) {
+      for (int inset = 0; inset < 2; ++inset) {
+        renderer.drawRect(cx - 2 - inset, cy - 2 - inset, PaperReadUi::kGridCardWidth + 4 + inset * 2,
+                          PaperReadUi::kGridCardHeight + 4 + inset * 2, true);
+      }
+    }
+
+    // Cover: 1px ink frame with the generated cover filling the card.
+    renderer.drawRect(cx, cy, PaperReadUi::kGridCardWidth, PaperReadUi::kGridCardHeight, true);
+    // Inner tone band (spec §4: greyscale card fill, no bitmap if unavailable).
+    renderer.fillRectDither(cx + 6, cy + 6, PaperReadUi::kGridCardWidth - 12, PaperReadUi::kGridCardHeight - 12,
+                            Color::LightGray);
+    {
+      const int titleWidth = PaperReadUi::kGridCardWidth;
+      const int lineHeight = renderer.getLineHeight(NOTOSERIF_12_FONT_ID);
+      int textY = cy + PaperReadUi::kGridCardHeight - 16 - lineHeight * 2;
+      if (textY < cy + 8) textY = cy + 8;
+      renderer.drawText(NOTOSERIF_12_FONT_ID, cx + 6, textY,
+                        renderer.truncatedText(NOTOSERIF_12_FONT_ID, title.c_str(), titleWidth - 12).c_str(), true);
+    }
+
+    // Title (18px) below the card, then status (15px grey).
+    const int labelY = cy + PaperReadUi::kGridCardHeight + 10;
+    renderer.drawText(NOTOSERIF_14_FONT_ID, cx, labelY,
+                      renderer.truncatedText(NOTOSERIF_14_FONT_ID, title.c_str(), PaperReadUi::kGridCardWidth).c_str(),
+                      true);
+    char status[24];
+    if (completed) {
+      std::snprintf(status, sizeof(status), "%s", tr(STR_BOOK_FINISHED_SHORT));
+    } else if (percent == 0) {
+      std::snprintf(status, sizeof(status), "%s", tr(STR_UNREAD_SHORT));
+    } else {
+      std::snprintf(status, sizeof(status), "%u%%", static_cast<unsigned>(percent));
+    }
+    renderer.drawText(NOTOSERIF_12_FONT_ID, cx, labelY + 24, status, true);
+
+    ++slot;
+  }
+
+  if (filtered == 0) {
+    const char* empty = tr(STR_LIBRARY_EMPTY);
+    const int w = renderer.getTextWidth(NOTOSERIF_12_FONT_ID, empty);
+    renderer.drawText(NOTOSERIF_12_FONT_ID, (PaperReadUi::kScreenWidth - w) / 2, PaperReadUi::kGridTop + 80, empty,
+                      true);
+  }
+
+  // --- Pager --------------------------------------------------------------
+  renderer.drawLine(PaperReadUi::kSideMargin, PaperReadUi::kPagerRuleY,
+                    PaperReadUi::kScreenWidth - PaperReadUi::kSideMargin - 1, PaperReadUi::kPagerRuleY, false);
+  {
+    const int lineHeight = renderer.getLineHeight(NOTOSERIF_12_FONT_ID);
+    const int textY = PaperReadUi::kPagerMidY - lineHeight / 2;
+    renderer.drawText(NOTOSERIF_14_FONT_ID, PaperReadUi::kSideMargin, textY, tr(STR_PREV_PAGE_LABEL), true);
+    char pageLabel[32];
+    std::snprintf(pageLabel, sizeof(pageLabel), tr(STR_PAGE_INDICATOR_FMT), static_cast<unsigned>(paperreadPage + 1),
+                  static_cast<unsigned>(pageCount));
+    const int pw = renderer.getTextWidth(NOTOSERIF_12_FONT_ID, pageLabel);
+    renderer.drawText(NOTOSERIF_12_FONT_ID, (PaperReadUi::kScreenWidth - pw) / 2, textY, pageLabel, true);
+    const char* next = tr(STR_NEXT_PAGE_LABEL);
+    const int nw = renderer.getTextWidth(NOTOSERIF_14_FONT_ID, next);
+    renderer.drawText(NOTOSERIF_14_FONT_ID, PaperReadUi::kScreenWidth - PaperReadUi::kSideMargin - nw, textY, next,
+                      true);
+  }
+
+  GUI.drawMainTabBar(renderer, mainTabLayout().tabBar, MainTab::Library);
+  renderer.displayBuffer();
+  return true;
+}
+
+void LibraryListActivity::handlePaperReadInput() {
+  constexpr int kCellsPerPage = 6;
+  const int filtered = paperreadFilteredCount();
+  const int pageCount = std::max(1, (filtered + kCellsPerPage - 1) / kCellsPerPage);
+  const int total = bookRowCount();
+
+  int x = 0;
+  int y = 0;
+  if (mappedInput.wasScreenTapped(x, y)) {
+    // Chip row: 全部 / 在读 / 未读.
+    if (y >= PaperReadUi::kFilterTop && y <= PaperReadUi::kFilterTop + PaperReadUi::kFilterHeight) {
+      char allLabel[32];
+      char readingLabel[32];
+      char unreadLabel[32];
+      std::snprintf(allLabel, sizeof(allLabel), tr(STR_FILTER_ALL_FMT), static_cast<unsigned>(total));
+      std::snprintf(readingLabel, sizeof(readingLabel), tr(STR_FILTER_READING_FMT), 0U);
+      std::snprintf(unreadLabel, sizeof(unreadLabel), tr(STR_FILTER_UNREAD_FMT), 0U);
+      const char* labels[3] = {allLabel, readingLabel, unreadLabel};
+      int chipX = PaperReadUi::kSideMargin;
+      for (int i = 0; i < 3; ++i) {
+        const int w = PaperReadUi::chipWidth(renderer, labels[i]);
+        if (x >= chipX && x < chipX + w) {
+          const PaperReadFilter next = static_cast<PaperReadFilter>(i);
+          if (next != paperreadFilter) {
+            paperreadFilter = next;
+            paperreadPage = 0;
+          }
+          requestUpdate();
+          return;
+        }
+        chipX += w + PaperReadUi::kFilterGap;
+      }
+      return;
+    }
+
+    // Pager: left third = prev, right third = next.
+    if (y >= PaperReadUi::kPagerRuleY && y <= PaperReadUi::kTabBarTop) {
+      const int third = PaperReadUi::kScreenWidth / 3;
+      if (x < third) {
+        if (paperreadPage > 0) --paperreadPage;
+      } else if (x >= 2 * third) {
+        if (paperreadPage + 1 < pageCount) ++paperreadPage;
+      }
+      paperreadCursor = 0;
+      requestUpdate();
+      return;
+    }
+
+    // Cover grid: open the tapped book.
+    for (int slot = 0; slot < kCellsPerPage; ++slot) {
+      const int cx = PaperReadUi::gridCellX(slot);
+      const int cy = PaperReadUi::gridCellY(slot);
+      if (x >= cx && x < cx + PaperReadUi::kGridCardWidth && y >= cy && y < cy + PaperReadUi::kGridCardHeight + 50) {
+        paperreadCursor = slot;
+        const int target = paperreadPage * kCellsPerPage + slot;
+        // Walk the same filtered sequence to find the original entry.
+        int shown = 0;
+        for (int entry = 0; entry < total; ++entry) {
+          std::string title;
+          uint8_t percent = 0;
+          bool completed = false;
+          if (!paperreadEntryText(entry, title, percent, completed)) continue;
+          if (paperreadFilter == PaperReadFilter::Reading) {
+            if (!(percent > 0 && !completed)) continue;
+          } else if (paperreadFilter == PaperReadFilter::Unread) {
+            if (percent != 0) continue;
+          }
+          if (shown == target) {
+            activateIndex(entry);
+            return;
+          }
+          ++shown;
+        }
+        return;
+      }
+    }
+  }
+
+  // Buttons / swipe page the grid.
+  if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
+    // Open the book under the cursor (5 = the last slot on the page).
+    int shown = 0;
+    const int target = paperreadPage * kCellsPerPage + paperreadCursor;
+    for (int entry = 0; entry < total; ++entry) {
+      std::string title;
+      uint8_t percent = 0;
+      bool completed = false;
+      if (!paperreadEntryText(entry, title, percent, completed)) continue;
+      if (paperreadFilter == PaperReadFilter::Reading) {
+        if (!(percent > 0 && !completed)) continue;
+      } else if (paperreadFilter == PaperReadFilter::Unread) {
+        if (percent != 0) continue;
+      }
+      if (shown == target) {
+        activateIndex(entry);
+        return;
+      }
+      ++shown;
+    }
+    return;
+  }
+  const auto swipe = mappedInput.wasSwipe();
+  const int pageCountSafe = std::max(1, pageCount);
+  if (mappedInput.wasReleased(MappedInputManager::Button::NavNext) || swipe == MappedInputManager::SwipeDir::Left) {
+    if (paperreadCursor + 1 < kCellsPerPage && paperreadPage * kCellsPerPage + paperreadCursor + 1 < filtered) {
+      ++paperreadCursor;
+    } else if (paperreadPage + 1 < pageCountSafe) {
+      ++paperreadPage;
+      paperreadCursor = 0;
+    }
+    requestUpdate();
+    return;
+  }
+  if (mappedInput.wasReleased(MappedInputManager::Button::NavPrevious) ||
+      swipe == MappedInputManager::SwipeDir::Right) {
+    if (paperreadCursor > 0) {
+      --paperreadCursor;
+    } else if (paperreadPage > 0) {
+      --paperreadPage;
+      paperreadCursor = kCellsPerPage - 1;
+    }
+    requestUpdate();
+    return;
+  }
+}
+#endif  // FREEINK_DEVICE_READPICO
 
 void LibraryListActivity::drawFooter() {
   drawPositionReadout();
