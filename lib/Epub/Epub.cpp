@@ -328,6 +328,10 @@ CssParser::ParseResult Epub::parseCssFiles(const CssParser::CacheStatus existing
   constexpr size_t MAX_CSS_FILE_SIZE = 128 * 1024;  // 128KB
   // Minimum heap required before attempting CSS parsing
   constexpr size_t MIN_HEAP_FOR_CSS_PARSING = 64 * 1024;  // 64KB
+  // Below this we stop trying: the SD read path plus the temp-file write need
+  // room of their own, and a starved parse would just fail deeper in.
+  // Between the two, parsing proceeds opportunistically (see the gate below).
+  constexpr size_t MIN_HEAP_HARD_FLOOR = 24 * 1024;  // 24KB
 
   if (cssFiles.empty()) {
     LOG_DBG("EBP", "No CSS files to parse, but CssParser created for inline styles");
@@ -402,15 +406,32 @@ CssParser::ParseResult Epub::parseCssFiles(const CssParser::CacheStatus existing
     }
     LOG_DBG("EBP", "Parsing CSS file: %s", cssPath.c_str());
 
-    // Check heap before parsing - CSS parsing allocates heavily
+    // Heap gate. Below the comfort threshold we do NOT discard the sheet: the
+    // parser is streaming (512 B read buffer, 1 KB stack selector/decl buffers)
+    // and its only heap growth is the bounded rule store, which reports every
+    // failure instead of throwing. A thin heap costs us rules, not correctness,
+    // and the "partial" result makes a later open retry the stylesheets with
+    // more headroom. Skipping made the failure total: with every sheet skipped
+    // cssParser stays empty and Epub drops the whole stylesheet, so the book
+    // rendered with no indent, no paragraph spacing and no alignment.
     const uint32_t freeHeap = ESP.getFreeHeap();
-    if (freeHeap < MIN_HEAP_FOR_CSS_PARSING) {
-      LOG_ERR("EBP", "Insufficient heap for CSS parsing (%u bytes free, need %zu), skipping: %s", freeHeap,
-              MIN_HEAP_FOR_CSS_PARSING, cssPath.c_str());
+    const bool lowHeap = freeHeap < MIN_HEAP_FOR_CSS_PARSING;
+    if (lowHeap) {
+      // Reserve the last sliver for the SD read path and the temp-file write;
+      // below this the parse cannot be attempted at all.
+      if (freeHeap < MIN_HEAP_HARD_FLOOR) {
+        LOG_ERR("EBP", "Heap far too low for CSS parsing (%u bytes free, need %zu), skipping: %s", freeHeap,
+                MIN_HEAP_HARD_FLOOR, cssPath.c_str());
+        if (parseResult == CssParser::ParseResult::Complete) {
+          parseResult = CssParser::ParseResult::Partial;
+        }
+        continue;
+      }
+      LOG_INF("EBP", "Tight heap for CSS parsing (%u bytes free), parsing opportunistically: %s", freeHeap,
+              cssPath.c_str());
       if (parseResult == CssParser::ParseResult::Complete) {
         parseResult = CssParser::ParseResult::Partial;
       }
-      continue;
     }
 
     // Check CSS file size before decompressing - skip files that are too large

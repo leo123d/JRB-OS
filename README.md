@@ -4,6 +4,12 @@
 
 运行在 **小纸 Read Pico**（MindReset RDP-G01-W，ESP32-S3-N16R8，4.7″ 684×1216 16 级灰度墨水屏）上。
 
+> ## 🔌 [**网页刷机工具 →**](https://leo123d.github.io/JRB-OS/)
+> 用 Edge / Chrome 直接刷入，**不需要安装任何软件**。固件在本地通过 Web Serial 写入，不会上传到任何服务器。
+>
+> 首次刷入必须**整表刷写**（bootloader + partitions + boot_app0 + firmware），
+> 因为本固件使用双槽 A/B 分区表，与板厂出厂分区表不同。页面里有一键完整备份。
+
 > 📖 **接手开发请先读 [`docs/jrbos/HANDOVER.md`](docs/jrbos/HANDOVER.md)** —— 交接文档，
 > 含构建环境关键补丁、已完成的实测数据、六条硬教训、下一步优先级。
 >

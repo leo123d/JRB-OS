@@ -1,0 +1,46 @@
+name: Deploy web flasher to GitHub Pages
+
+# Publishes docs/flash/ as the site root, so users get:
+#   https://leo123d.github.io/JRB-OS/
+#
+# Using an artifact upload (rather than "deploy from /docs") keeps the Pages
+# root clean: the repository's docs/ tree also holds upstream and project
+# documentation that should not be the landing page.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'docs/flash/**'
+      - '.github/workflows/pages.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload flasher as the site artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: docs/flash
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

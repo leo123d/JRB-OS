@@ -1,0 +1,599 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>JRB OS 刷机工具 — 小纸 Read Pico</title>
+<style>
+  :root{
+    --bg:#f6f4ef; --panel:#fffdf8; --ink:#2b2823; --muted:#6b6459;
+    --line:#e0dacd; --accent:#3f6b4f; --accent2:#2f5540;
+    --warn-bg:#fdf6e3; --warn-line:#e8d9a8; --warn-ink:#7a5c12;
+    --err-bg:#fdeceb; --err-line:#f0c2bd; --err-ink:#9b2c22;
+    --ok-bg:#eef5ef; --ok-line:#c8ddcd; --ok-ink:#2f5540;
+    --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,"Liberation Mono",monospace;
+  }
+  *{box-sizing:border-box}
+  body{
+    margin:0; padding:0 16px 72px;
+    background:var(--bg); color:var(--ink);
+    font:16px/1.65 -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;
+    -webkit-font-smoothing:antialiased;
+  }
+  .wrap{max-width:820px;margin:0 auto}
+  header{padding:40px 0 8px}
+  h1{font-size:30px;line-height:1.25;margin:0 0 6px;letter-spacing:-.01em}
+  .sub{color:var(--muted);font-size:15px;margin:0}
+  h2{font-size:19px;margin:36px 0 12px;padding-bottom:8px;border-bottom:1px solid var(--line)}
+  h3{font-size:16px;margin:22px 0 8px}
+  p{margin:10px 0}
+  a{color:var(--accent2)}
+  code,kbd{font-family:var(--mono);font-size:.9em;background:#0000000d;padding:2px 5px;border-radius:4px}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:22px;margin:16px 0}
+  .note,.warn,.err,.ok{border-radius:10px;padding:14px 16px;margin:14px 0;border:1px solid;font-size:15px}
+  .note{background:#fff;border-color:var(--line)}
+  .warn{background:var(--warn-bg);border-color:var(--warn-line);color:var(--warn-ink)}
+  .warn strong{color:#5d4409}
+  .err{background:var(--err-bg);border-color:var(--err-line);color:var(--err-ink)}
+  .ok{background:var(--ok-bg);border-color:var(--ok-line);color:var(--ok-ink)}
+  .hide{display:none !important}
+  button{
+    font:inherit;font-weight:600;cursor:pointer;border-radius:10px;
+    border:1px solid var(--accent2);background:var(--accent);color:#fff;
+    padding:12px 20px;transition:.15s;
+  }
+  button:hover:not(:disabled){background:var(--accent2)}
+  button:disabled{opacity:.45;cursor:not-allowed}
+  button.ghost{background:#fff;color:var(--ink);border-color:var(--line)}
+  button.ghost:hover:not(:disabled){background:#f1ede4}
+  button.danger{background:#a8352a;border-color:#8d2a20}
+  button.danger:hover:not(:disabled){background:#8d2a20}
+  .row{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin:14px 0}
+  .steps{margin:0;padding-left:0;list-style:none;counter-reset:s}
+  .steps>li{counter-increment:s;position:relative;padding:6px 0 6px 40px;margin:6px 0}
+  .steps>li::before{
+    content:counter(s);position:absolute;left:0;top:6px;
+    width:26px;height:26px;border-radius:50%;background:var(--accent);color:#fff;
+    font-size:14px;font-weight:700;display:flex;align-items:center;justify-content:center;
+  }
+  .steps>li.done::before{content:"✓"}
+  .steps>li.active::before{background:#b8860b}
+  .progress{height:12px;border-radius:99px;background:#0000000f;overflow:hidden;margin:14px 0 6px}
+  .progress>i{display:block;height:100%;width:0;background:var(--accent);transition:width .2s}
+  .pmeta{display:flex;justify-content:space-between;font-size:13px;color:var(--muted);font-family:var(--mono)}
+  pre.log{
+    background:#1f1d1a;color:#d8d3c8;border-radius:10px;padding:14px;
+    font-family:var(--mono);font-size:12.5px;line-height:1.55;
+    max-height:300px;overflow:auto;white-space:pre-wrap;word-break:break-word;margin:12px 0
+  }
+  table{width:100%;border-collapse:collapse;font-size:14px;margin:12px 0}
+  th,td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--line);vertical-align:top}
+  th{font-weight:600;color:var(--muted);font-size:13px}
+  td.mono,th.mono{font-family:var(--mono);font-size:12.5px;word-break:break-all}
+  .badge{display:inline-block;font-size:12px;font-weight:700;padding:2px 8px;border-radius:99px;background:var(--warn-bg);color:var(--warn-ink);border:1px solid var(--warn-line)}
+  .badge.ok{background:var(--ok-bg);color:var(--ok-ink);border-color:var(--ok-line)}
+  footer{margin-top:48px;padding-top:20px;border-top:1px solid var(--line);color:var(--muted);font-size:14px}
+  details{margin:12px 0}
+  summary{cursor:pointer;font-weight:600}
+  .kbd-list td:first-child{white-space:nowrap;width:1%}
+  @media (prefers-color-scheme:dark){
+    :root{--bg:#1c1a17;--panel:#252220;--ink:#e8e3d9;--muted:#a09889;--line:#3a3630;
+          --warn-bg:#332a12;--warn-line:#5c4a1c;--warn-ink:#e2c777;
+          --err-bg:#3a1f1c;--err-line:#5e2f29;--err-ink:#f0b0a7;
+          --ok-bg:#1e2c22;--ok-line:#33503c;--ok-ink:#a8cfb5}
+    code,kbd{background:#ffffff14}
+    button.ghost{background:#2b2825}
+    button.ghost:hover:not(:disabled){background:#343029}
+    .note{background:#252220}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <h1>JRB OS 刷机工具</h1>
+  <p class="sub">
+    小纸 Read Pico（ESP32-S3 · 16 MB Flash）· 使用 Edge / Chrome 的 Web Serial 直接在浏览器里刷入，无需安装任何软件
+  </p>
+</header>
+
+<!-- ============ 环境检查 ============ -->
+<div id="env-err" class="err hide"></div>
+
+<div id="env-note" class="note hide"></div>
+
+<!-- ============ 核心警告 ============ -->
+<div class="warn">
+  <strong>⚠️ 首次刷入必须整表刷写</strong><br>
+  本固件使用<strong>双槽 A/B 分区表</strong>，与板厂出厂分区表不同。
+  所以必须同时写入 <code>bootloader</code> / <code>partitions</code> / <code>boot_app0</code> / <code>firmware</code> 四部分。<br>
+  只写应用（app-only）会因分区偏移不同而失败或无法启动。
+</div>
+
+<div class="warn">
+  <strong>⚠️ 这是 v0.1.0 预发布版，从未在真机上验证过</strong><br>
+  体积数据是实测的，但<strong>运行时行为未经验证</strong>。其中一个已知风险：内嵌中日韩字库被改成了 DEFLATE 压缩
+  （省 471 KB），而<strong>上游刻意不压缩</strong>它，因为历史上真机出现过
+  <code>FontDecompressor std::bad_alloc</code> 崩溃。<br>
+  如果刷完出现反复重启或翻页崩溃，请<strong>回退到官方固件</strong>：本工具第一步的「完整备份」就是为此准备的。
+</div>
+
+<!-- ============ 步骤 1：备份 ============ -->
+<h2>步骤 1 · 完整备份（强烈建议）</h2>
+<p>刷机前先把设备当前的 16 MB Flash 完整读出来存成文件。万一新固件有问题，可以整表刷回去。</p>
+<div class="row">
+  <button id="btn-backup" class="ghost" disabled>连接设备并备份 16 MB</button>
+  <span id="backup-hint" class="badge">尚未备份</span>
+</div>
+<p style="font-size:14px;color:var(--muted)">
+  备份会把 16 MB 全部读出并通过浏览器保存为 <code>readpico-backup-16MB.bin</code>，大约需要 1–3 分钟。<br>
+  如果你已经有备份，或者不介意风险，可以跳过这一步直接到步骤 2。
+</p>
+
+<!-- ============ 步骤 2：刷入 ============ -->
+<h2>步骤 2 · 刷入 JRB OS v0.1.0</h2>
+
+<div class="card">
+  <h3 style="margin-top:0">固件来源</h3>
+  <div class="row" style="margin-top:6px">
+    <label><input type="radio" name="src" value="remote" checked> 从 GitHub 自动下载（推荐）</label>
+    <label><input type="radio" name="src" value="local"> 我自己选文件（离线 / 下载失败时用）</label>
+  </div>
+
+  <div id="remote-box">
+    <table>
+      <thead><tr><th>文件</th><th>写入地址</th><th class="mono">MD5</th></tr></thead>
+      <tbody>
+        <tr><td><code>bootloader.bin</code></td><td class="mono">0x0</td><td class="mono">2b0e6d80d7f396458a4a45fa0b82614c</td></tr>
+        <tr><td><code>partitions.bin</code></td><td class="mono">0x8000</td><td class="mono">118cbdbfce82eb12bbdeb7c59af2fce8</td></tr>
+        <tr><td><code>boot_app0.bin</code></td><td class="mono">0xe000</td><td class="mono">e6327541e2dc394ca2c3b3280ac0f39f</td></tr>
+        <tr><td><code>firmware.bin</code></td><td class="mono">0x10000</td><td class="mono">afd248777ac53a2319dff4ac30beb1e8</td></tr>
+      </tbody>
+    </table>
+    <p style="font-size:14px;color:var(--muted);margin-bottom:4px">
+      来源：<a id="rel-link" href="https://github.com/leo123d/JRB-OS/releases/tag/jrbos-v0.1.0" target="_blank" rel="noopener">JRB-OS release jrbos-v0.1.0</a> ·
+      下载后会用上面的 MD5 校验，并在写入时让 esptool 再校验一次。
+    </p>
+  </div>
+
+  <div id="local-box" class="hide">
+    <p style="font-size:14px;color:var(--muted)">
+      请选择 release 里的四个文件。地址由文件名自动识别，你也可以手动改。
+    </p>
+    <div id="file-rows"></div>
+    <div class="row"><button id="btn-addfile" class="ghost">+ 添加一个文件</button></div>
+  </div>
+</div>
+
+<div class="row">
+  <button id="btn-flash" disabled>连接设备并刷入</button>
+  <button id="btn-abort" class="ghost hide">中止</button>
+</div>
+
+<h3>进度</h3>
+<div class="progress"><i id="bar"></i></div>
+<div class="pmeta"><span id="pmsg">等待开始</span><span id="ppct">0%</span></div>
+<ol class="steps" id="steplist">
+  <li data-k="connect">连接设备（识别芯片型号）</li>
+  <li data-k="prepare">准备固件镜像</li>
+  <li data-k="write">写入 Flash</li>
+  <li data-k="reset">重启设备</li>
+</ol>
+
+<details>
+  <summary>技术日志</summary>
+  <pre class="log" id="log">就绪。</pre>
+</details>
+
+<!-- ============ 排错 ============ -->
+<h2>连不上设备？</h2>
+<ol class="steps">
+  <li><strong>用 Edge 或 Chrome 桌面版</strong>（版本 89+）。Firefox / Safari 不支持 Web Serial。</li>
+  <li><strong>用能传数据的 USB-C 线</strong>。很多线只能充电，认不到设备。</li>
+  <li>把设备<strong>进入下载模式</strong>：<br>
+      <span style="font-size:14px;color:var(--muted)">
+      设备完全断电 → <strong>按住电源键不松</strong> → 插入 USB 线 → 保持按住约 3 秒后松开。
+      屏幕可能保持黑屏或停在启动画面，这是正常的。</span></li>
+  <li><strong>关掉占用串口的程序</strong>：Arduino IDE 串口监视器、PlatformIO 监视器、其它刷机页面、串口调试助手。</li>
+  <li>换一个 USB 口（优先接主板直出的口，不要用前置面板或 Hub）。</li>
+  <li>在设备的弹窗里，选中的端口通常叫 <code>USB Serial Device</code> 或 <code>USB JTAG/serial debug unit</code>。</li>
+</ol>
+
+<details>
+  <summary>如何回退到官方固件</summary>
+  <p>如果你做过步骤 1 的备份，回退很简单：<strong>用命令行整表刷回备份文件</strong>。</p>
+  <pre class="log">esptool.py --chip esp32s3 --port COMx --baud 921600 write_flash 0x0 readpico-backup-16MB.bin</pre>
+  <p style="font-size:14px;color:var(--muted)">
+  这个网页工具目前只做「写入」，不做「整表恢复」（16 MB 写入在浏览器里太慢且容易中断）。
+  恢复请用命令行，更可靠。
+  </p>
+</details>
+
+<h2>刷完之后</h2>
+<ol class="steps">
+  <li><strong>拔掉 USB，再重新开机</strong>（不要直接按复位键，让它走完整启动流程）。</li>
+  <li>确认语言列表只有中文 + 英文，首页不再有「应用」入口，微信读书入口消失。</li>
+  <li>确认设置里还留着「SD 卡固件更新」（这是唯一的 OTA 途径）。</li>
+  <li><strong>中文显示</strong>：内嵌了 3500 常用字，常用字可直接显示；生僻字需要 SD 卡字库。</li>
+  <li><strong>重点验证</strong>：打开一本中文书，连续翻 200 页；反复切换字号 12↔14↔16↔20。
+      这一步是为了验证压缩字库是否稳定。</li>
+  <li>开一本带 DRM 的 EPUB，确认仍能解密（验证加密模块没被误删）。</li>
+</ol>
+<p>遇到问题请到 <a href="https://github.com/leo123d/JRB-OS/issues" target="_blank" rel="noopener">GitHub Issues</a> 反馈，附上技术日志。</p>
+
+<footer>
+  JRB OS（Just Read Book）· MIT 许可 · 基于 <a href="https://github.com/0x1abin/crossmux" target="_blank" rel="noopener">CrossMux</a> 做减法<br>
+  刷机可由 <a href="https://github.com/espressif/esptool-js" target="_blank" rel="noopener">esptool-js</a>（Espressif，Apache-2.0）在本地完成 —— 固件不会上传到任何服务器。
+</footer>
+
+</div>
+
+<script type="module">
+/* ------------------------------------------------------------------ *
+ *  JRB OS web flasher  —  esptool-js over Web Serial (ESP32-S3)
+ *
+ *  Design notes (verified against esptool-js 0.6.1 internals):
+ *   - ESPLoader already installs a `usbJTAGSerialReset` constructor by
+ *     default, so no custom reset wiring is needed for this board
+ *     (its console runs on the native USB Serial/JTAG).
+ *   - esptool-js performs its own read-back verification after every
+ *     write ("calculate md5sum" -> "Hash of data verified"), so we do
+ *     not pass `calculateMD5Hash` (that callback must be synchronous,
+ *     and a sync MD5 of the *pre-parameter-patch* bytes would actually
+ *     cause false mismatch errors because esptool patches flash params
+ *     into the image before hashing).
+ *   - Instead we verify each downloaded image with async SHA-256 before
+ *     writing anything, so a bad download can never half-erase a device.
+ * ------------------------------------------------------------------ */
+
+const REL = 'https://github.com/leo123d/JRB-OS/releases/download/jrbos-v0.1.0';
+const RELEASE_PAGE = 'https://github.com/leo123d/JRB-OS/releases/tag/jrbos-v0.1.0';
+
+/* Addresses and SHA-256 taken from the published release assets. */
+const IMAGES = [
+  { name: 'bootloader.bin', address: 0x0,     sha256: '15f88ae11793eddc5b7e1f770fba54b10a6f59809c14d7c51cfbf0db8d2fa3ca' },
+  { name: 'partitions.bin', address: 0x8000,  sha256: 'bd0f7954aca2ef7d925ee21aaa1f3dc8822d1d6ce5cbbd26a135e5886bfff6ce' },
+  { name: 'boot_app0.bin',  address: 0xe000,  sha256: 'f94c5d786a7a8fab06ac5d10e33bf37711a6697636dc037559ea19cc410a17f0' },
+  { name: 'firmware.bin',   address: 0x10000, sha256: '1ab87046a1082e073390d9793aa936f574ba27ad6b3314eea296159fe1deed20' },
+];
+
+const FLASH_MODE  = 'dio';    // ESP32-S3
+const FLASH_FREQ  = '80m';
+const FLASH_SIZE  = '16MB';
+const FULL_BYTES  = 16 * 1024 * 1024;
+
+/* ---------------- DOM ---------------- */
+const $ = (id) => document.getElementById(id);
+const logEl = $('log'), barEl = $('bar'), pmsgEl = $('pmsg'), ppctEl = $('ppct');
+const btnBackup = $('btn-backup'), btnFlash = $('btn-flash'), btnAbort = $('btn-abort');
+const btnAddFile = $('btn-addfile'), localBox = $('local-box'), remoteBox = $('remote-box');
+const backupHint = $('backup-hint'), envErr = $('env-err');
+
+let aborted = false;
+let esploader = null, transport = null, port = null;
+
+/* ---------------- UI helpers ---------------- */
+function log(line) {
+  const t = new Date().toTimeString().slice(0, 8);
+  logEl.textContent += `\n[${t}] ${line}`;
+  logEl.scrollTop = logEl.scrollHeight;
+}
+function clearLog(msg) { logEl.textContent = msg || ''; }
+function setProgress(pct, msg) {
+  const p = Math.max(0, Math.min(100, pct));
+  barEl.style.width = p + '%';
+  ppctEl.textContent = p.toFixed(0) + '%';
+  if (msg) pmsgEl.textContent = msg;
+}
+function step(key, state) {
+  const li = document.querySelector(`#steplist li[data-k="${key}"]`);
+  if (!li) return;
+  li.classList.remove('active', 'done');
+  if (state) li.classList.add(state);
+}
+function fail(message) {
+  envErr.textContent = message;
+  envErr.classList.remove('hide');
+  log('错误：' + message);
+}
+
+/* ---------------- environment ---------------- */
+if (!('serial' in navigator)) {
+  fail('这个浏览器不支持 Web Serial。请用桌面版 Microsoft Edge 或 Google Chrome（89 及以上）打开本页面。');
+  btnBackup.disabled = btnFlash.disabled = true;
+} else if (!window.isSecureContext) {
+  fail('本页面必须通过 HTTPS 打开才能使用串口功能。');
+}
+
+/* ---------------- integrity ---------------- */
+async function sha256Hex(bytes) {
+  const d = await crypto.subtle.digest('SHA-256', bytes);
+  return [...new Uint8Array(d)].map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
+async function fetchImage(img) {
+  const resp = await fetch(`${REL}/${img.name}`, { redirect: 'follow' });
+  if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+  const data = new Uint8Array(await resp.arrayBuffer());
+  const got = await sha256Hex(data);
+  if (got !== img.sha256) {
+    throw new Error(`SHA-256 校验失败（期望 ${img.sha256.slice(0, 16)}…，实际 ${got.slice(0, 16)}…）`);
+  }
+  return data;
+}
+
+/* ---------------- image loading ---------------- */
+function guessAddress(name) {
+  const n = name.toLowerCase();
+  if (n.includes('bootloader')) return 0x0;
+  if (n.includes('partition'))  return 0x8000;
+  if (n.includes('boot_app0'))  return 0xe000;
+  if (n.includes('factory'))    return 0x0;      // pre-merged single image
+  return 0x10000;
+}
+
+async function loadLocalImages() {
+  const rows = [...$('file-rows').querySelectorAll('.row')];
+  const picked = rows
+    .map(r => ({ input: r.querySelector('input[type=file]'), addr: r.querySelector('.addr') }))
+    .filter(x => x.input.files && x.input.files[0]);
+
+  if (!picked.length) {
+    throw new Error('还没有选择任何文件。请点「+ 添加一个文件」选择 release 里的 .bin 文件。');
+  }
+
+  const out = [];
+  for (const { input, addr } of picked) {
+    const file = input.files[0];
+    const data = new Uint8Array(await file.arrayBuffer());
+    let address = addr.value.trim() ? Number(addr.value.trim()) : guessAddress(file.name);
+    if (!Number.isFinite(address) || address < 0) {
+      throw new Error(`${file.name} 的地址无效：${addr.value}`);
+    }
+    log(`已读取 ${file.name} — ${data.length.toLocaleString()} 字节 → 0x${address.toString(16)}`);
+    out.push({ data, address, name: file.name });
+  }
+  return out;
+}
+
+async function loadAllImages() {
+  const mode = document.querySelector('input[name="src"]:checked').value;
+  if (mode === 'local') {
+    clearLog('正在读取本地文件…');
+    return loadLocalImages();
+  }
+
+  clearLog('正在从 GitHub 下载固件…');
+  const out = [];
+  for (let i = 0; i < IMAGES.length; i++) {
+    const img = IMAGES[i];
+    setProgress(3 + (i / IMAGES.length) * 9, `下载 ${img.name}…`);
+    try {
+      const data = await fetchImage(img);
+      log(`已下载 ${img.name} — ${data.length.toLocaleString()} 字节 · SHA-256 校验通过`);
+      out.push({ data, address: img.address, name: img.name });
+    } catch (e) {
+      throw new Error(
+        `无法获取 ${img.name}：${e.message}\n` +
+        `如果反复失败（例如浏览器插件拦截、或网络无法访问 GitHub），` +
+        `请切换到「我自己选文件」，从 release 页手动下载四个 .bin 后在此选择。`
+      );
+    }
+  }
+  return out;
+}
+
+/* ---------------- esptool-js ---------------- */
+async function loadEsptool() {
+  const cdns = [
+    'https://unpkg.com/esptool-js@0.6.1/bundle.js',
+    'https://cdn.jsdelivr.net/npm/esptool-js@0.6.1/bundle.js',
+  ];
+  let lastErr = null;
+  for (const url of cdns) {
+    try {
+      const mod = await import(/* @vite-ignore */ url);
+      log(`esptool-js 已从 ${new URL(url).host} 载入`);
+      return mod;
+    } catch (e) { lastErr = e; }
+  }
+  throw new Error('无法载入 esptool-js（两个 CDN 都失败）。请检查网络或广告拦截插件。' +
+                  (lastErr ? ' ' + lastErr.message : ''));
+}
+
+const terminal = {
+  clean() { clearLog(''); },
+  writeLine(d) { log(String(d).replace(/\s+$/, '')); },
+  write(d) { logEl.textContent += String(d); logEl.scrollTop = logEl.scrollHeight; },
+};
+
+async function connect() {
+  const { ESPLoader, Transport } = await loadEsptool();
+
+  setProgress(5, '请在弹出的对话框里选择串口…');
+  log('等待选择串口…');
+  port = await navigator.serial.requestPort();
+
+  transport = new Transport(port, true);
+  esploader = new ESPLoader({
+    transport,
+    baudrate: 115200,
+    terminal,
+    debugLogging: false,
+    // ESPLoader installs usbJTAGSerialReset by default; this board's console
+    // is the native USB Serial/JTAG, so no override is required.
+  });
+
+  step('connect', 'active');
+  setProgress(7, '正在连接设备…');
+  const chip = await esploader.main();
+  log(`已连接：${chip}`);
+  step('connect', 'done');
+
+  if (!/ESP32-S3/i.test(chip)) {
+    log(`注意：检测到 ${chip}，而本固件是为 ESP32-S3 构建的。请确认设备型号。`);
+  }
+  return chip;
+}
+
+async function disconnect() {
+  try { if (transport) await transport.disconnect(); } catch (_) { /* ignore */ }
+  transport = null; esploader = null; port = null;
+}
+
+async function hardReset() {
+  try { await esploader.after('hard_reset'); }
+  catch (e) { log('重启命令未确认（通常无妨）：' + e.message); }
+}
+
+/* ---------------- backup ---------------- */
+async function backup() {
+  aborted = false;
+  envErr.classList.add('hide');
+  btnBackup.disabled = btnFlash.disabled = true;
+
+  try {
+    await connect();
+
+    log('开始读取 16 MB Flash（最慢的一步，请勿拔线）…');
+    const parts = [];
+    let done = 0;
+    const CHUNK = 1024 * 1024;
+
+    for (let off = 0; off < FULL_BYTES; off += CHUNK) {
+      if (aborted) throw new Error('已中止');
+      const data = await esploader.readFlash(off, CHUNK, () => {});
+      parts.push(data);
+      done += data.length;
+      setProgress((done / FULL_BYTES) * 100, `读取中 ${(done / 1048576).toFixed(1)} / 16 MB`);
+    }
+
+    const blob = new Blob(parts, { type: 'application/octet-stream' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'readpico-backup-16MB.bin';
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 10000);
+
+    backupHint.textContent = '已备份 ✓';
+    backupHint.classList.add('ok');
+    setProgress(100, '备份完成');
+    log('备份完成，已保存为 readpico-backup-16MB.bin');
+
+    await hardReset();
+  } catch (e) {
+    fail('备份失败：' + e.message);
+    setProgress(0, '备份失败');
+  } finally {
+    await disconnect();
+    btnBackup.disabled = false; btnFlash.disabled = false;
+  }
+}
+
+/* ---------------- flash ---------------- */
+async function flash() {
+  aborted = false;
+  envErr.classList.add('hide');
+  btnBackup.disabled = btnFlash.disabled = true;
+  btnAbort.classList.remove('hide');
+
+  try {
+    /* Fetch + verify images FIRST, so a download problem never leaves a
+       device half-written. */
+    step('prepare', 'active');
+    const images = await loadAllImages();
+    step('prepare', 'done');
+    setProgress(14, '固件已就绪');
+    log('将写入：' + images.map(i => `${i.name}@0x${i.address.toString(16)}`).join(', '));
+
+    await connect();
+
+    step('write', 'active');
+    setProgress(16, '开始写入…');
+    const total = images.reduce((s, i) => s + i.data.length, 0);
+    log(`共 ${total.toLocaleString()} 字节。请勿拔线、勿关闭页面。`);
+
+    await esploader.writeFlash({
+      fileArray: images.map(i => ({ data: i.data, address: i.address })),
+      flashMode: FLASH_MODE,
+      flashFreq: FLASH_FREQ,
+      flashSize: FLASH_SIZE,
+      eraseAll: false,
+      compress: true,
+      reportProgress: (fileIndex, written, fileTotal) => {
+        const name = images[fileIndex] ? images[fileIndex].name : `#${fileIndex}`;
+        setProgress(16 + (written / fileTotal) * 78,
+                    `写入 ${name} — ${(written / 1024).toFixed(0)} / ${(fileTotal / 1024).toFixed(0)} KB`);
+      },
+      // No calculateMD5Hash: see the note at the top of this file.
+      // esptool-js still verifies every write by reading it back.
+    });
+    step('write', 'done');
+
+    step('reset', 'active');
+    setProgress(96, '重启设备…');
+    await hardReset();
+    step('reset', 'done');
+
+    setProgress(100, '刷入完成');
+    log('刷入完成。请拔掉 USB，再重新开机。');
+  } catch (e) {
+    fail('刷入失败：' + e.message);
+    setProgress(0, '刷入失败');
+    log('如果设备无法启动，用步骤 1 的备份整表刷回（命令见页面下方「如何回退」）。');
+  } finally {
+    await disconnect();
+    btnAbort.classList.add('hide');
+    btnBackup.disabled = false; btnFlash.disabled = false;
+  }
+}
+
+/* ---------------- local-file rows ---------------- */
+function addFileRow() {
+  const row = document.createElement('div');
+  row.className = 'row';
+  row.innerHTML = `
+    <input type="file" accept=".bin" style="flex:1 1 240px;min-width:0">
+    <input type="text" class="addr" placeholder="地址"
+           style="width:110px;font-family:var(--mono);padding:9px;border-radius:8px;
+                  border:1px solid var(--line);background:transparent;color:inherit">
+    <button class="ghost rm">移除</button>`;
+  row.querySelector('.rm').addEventListener('click', () => row.remove());
+  $('file-rows').appendChild(row);
+  return row;
+}
+
+function addPresetRow() {
+  const row = addFileRow();
+  const rows = $('file-rows').querySelectorAll('.row');
+  const i = rows.length - 1;
+  const preset = ['bootloader.bin', 'partitions.bin', 'boot_app0.bin', 'firmware.bin'];
+  const addr = row.querySelector('.addr');
+  if (preset[i]) {
+    addr.value = '0x' + guessAddress(preset[i]).toString(16);
+    addr.placeholder = preset[i];
+  }
+}
+
+/* ---------------- wiring ---------------- */
+btnBackup.addEventListener('click', backup);
+btnFlash.addEventListener('click', flash);
+btnAbort.addEventListener('click', () => { aborted = true; log('用户请求中止…'); });
+btnAddFile.addEventListener('click', () => addFileRow());
+
+for (const r of document.querySelectorAll('input[name="src"]')) {
+  r.addEventListener('change', () => {
+    const local = document.querySelector('input[name="src"]:checked').value === 'local';
+    localBox.classList.toggle('hide', !local);
+    remoteBox.classList.toggle('hide', local);
+  });
+}
+
+for (let i = 0; i < 4; i++) addPresetRow();
+$('rel-link').href = RELEASE_PAGE;
+
+log('就绪。请先阅读上方的警告。');
+</script>
+</body>
+</html>
