@@ -21,7 +21,10 @@ def arrays(text):
 class UiChromeIconTest(unittest.TestCase):
     def test_native_dimensions_and_white_padding(self):
         data = arrays(HEADER.read_text())
-        self.assertEqual(len(data), 11)
+        # 10 arrays since ddd6e1d5 collapsed the tab bar from 5 tabs to 3: the
+        # statistics and apps tab glyphs went away with their tabs. The 4-cell
+        # PaperRead bar reuses the home/recent/library/settings glyphs.
+        self.assertEqual(len(data), 10)
         for name, bits in data.items():
             size = 56 if name.endswith('_56_bits') else 48 if name.endswith('_48_bits') else 32 if name.endswith('_32_bits') else 24 if name.endswith('_24_bits') else None
             self.assertEqual(len(bits), size * ((size + 7) // 8) if size else 80)
