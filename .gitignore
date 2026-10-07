@@ -38,3 +38,10 @@ weread_apikey*.bin
 sdkconfig.sticky
 sdkconfig.x4pro
 flake.*
+
+# Build artifacts that must never be committed (JRB OS)
+# GCC response/dependency files that land in the repo root when a syntax-only
+# compile is run by hand, plus stray single-object dependency files.
+*.rsp
+a-*.d
+.syntaxcheck.rsp
