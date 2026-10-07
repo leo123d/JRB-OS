@@ -1,6 +1,6 @@
 #include <gtest/gtest.h>
 
-#include "network/ProtectedPaths.h"
+#include "ota/ProtectedPaths.h"
 
 using protectedpaths::isPluginPath;
 using protectedpaths::isSensitivePath;
