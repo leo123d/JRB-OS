@@ -19,9 +19,7 @@
 #include "CrossPointSettings.h"
 #include "CrossPointState.h"
 #include "MappedInputManager.h"
-#include "OpdsServerStore.h"
 #include "RecentBooksStore.h"
-#include "activities/plugins/PluginCatalogActivity.h"  // anyPluginInstalled()
 #include "components/UITheme.h"
 #include "fontIds.h"
 #include "util/BookCoverLoader.h"
@@ -34,51 +32,43 @@ struct HomeMenuEntry {
 };
 
 constexpr HomeMenuEntry kDefaultMenuOrder[] = {
-    {HomeMenuItem::FILE_BROWSER, StrId::STR_BROWSE_FILES, Folder},
     {HomeMenuItem::LIBRARY, StrId::STR_LIBRARY, Library},
-    {HomeMenuItem::OPDS_BROWSER, StrId::STR_OPDS_BROWSER, Blocks},
-    {HomeMenuItem::FILE_TRANSFER, StrId::STR_FILE_TRANSFER, Transfer},
+    {HomeMenuItem::RECENTS, StrId::STR_MENU_RECENT_BOOKS, Recent},
     {HomeMenuItem::SETTINGS_MENU, StrId::STR_SETTINGS_TITLE, Settings},
-    {HomeMenuItem::APPS, StrId::STR_APPS_TITLE, Apps},
 };
 constexpr HomeMenuEntry kCarouselMenuOrder[] = {
-    {HomeMenuItem::FILE_BROWSER, StrId::STR_BROWSE_FILES, Folder},
+    {HomeMenuItem::LIBRARY, StrId::STR_LIBRARY, Library},
     {HomeMenuItem::RECENTS, StrId::STR_MENU_RECENT_BOOKS, Recent},
-    {HomeMenuItem::OPDS_BROWSER, StrId::STR_OPDS_BROWSER, Library},
-    {HomeMenuItem::APPS, StrId::STR_APPS_TITLE, Apps},
-    {HomeMenuItem::FILE_TRANSFER, StrId::STR_FILE_TRANSFER, Transfer},
     {HomeMenuItem::SETTINGS_MENU, StrId::STR_SETTINGS_TITLE, Settings},
 };
-constexpr int kHomeMenuItemCount = 6;
+constexpr int kHomeMenuItemCount = 3;
 
-constexpr const HomeMenuEntry* menuEntryAtIndex(int index, bool hasOpds, bool carousel) {
-  if (index < 0) return nullptr;
-  if (!hasOpds && index >= 2) ++index;
-  if (index >= kHomeMenuItemCount) return nullptr;
-  return &(carousel ? kCarouselMenuOrder : kDefaultMenuOrder)[index];
+// PaperRead (decision 7): three entries only -- 最近阅读 / 书库 / 设置.
+// The OPDS / apps / file-transfer slots are gone, so the old `hasOpds` index
+// shifting is removed and both tables are a flat, identical three entries.
+constexpr const HomeMenuEntry* menuEntryAtIndex(int index, bool carousel) {
+  (void)carousel;
+  if (index < 0 || index >= kHomeMenuItemCount) return nullptr;
+  return &kDefaultMenuOrder[index];
 }
 
-constexpr HomeMenuItem indexToMenuItem(int index, bool hasOpds, bool carousel) {
-  const HomeMenuEntry* entry = menuEntryAtIndex(index, hasOpds, carousel);
+constexpr HomeMenuItem indexToMenuItem(int index, bool carousel) {
+  const HomeMenuEntry* entry = menuEntryAtIndex(index, carousel);
   return entry == nullptr ? HomeMenuItem::NONE : entry->item;
 }
 
-constexpr int menuItemToIndex(HomeMenuItem item, bool hasOpds, bool carousel) {
-  const int count = hasOpds ? kHomeMenuItemCount : kHomeMenuItemCount - 1;
-  for (int i = 0; i < count; ++i) {
-    if (indexToMenuItem(i, hasOpds, carousel) == item) return i;
+constexpr int menuItemToIndex(HomeMenuItem item, bool carousel) {
+  for (int i = 0; i < kHomeMenuItemCount; ++i) {
+    if (indexToMenuItem(i, carousel) == item) return i;
   }
   return 0;
 }
 
-static_assert(indexToMenuItem(2, false, true) == HomeMenuItem::APPS);
-static_assert(indexToMenuItem(4, false, true) == HomeMenuItem::SETTINGS_MENU);
-static_assert(indexToMenuItem(3, true, true) == HomeMenuItem::APPS);
-static_assert(indexToMenuItem(5, true, true) == HomeMenuItem::SETTINGS_MENU);
-static_assert(indexToMenuItem(2, false, false) == HomeMenuItem::FILE_TRANSFER);
-static_assert(indexToMenuItem(4, false, false) == HomeMenuItem::APPS);
-static_assert(menuItemToIndex(HomeMenuItem::APPS, false, true) == 2);
-static_assert(menuItemToIndex(HomeMenuItem::SETTINGS_MENU, true, true) == 5);
+static_assert(indexToMenuItem(0, true) == HomeMenuItem::LIBRARY);
+static_assert(indexToMenuItem(1, true) == HomeMenuItem::RECENTS);
+static_assert(indexToMenuItem(2, true) == HomeMenuItem::SETTINGS_MENU);
+static_assert(menuItemToIndex(HomeMenuItem::SETTINGS_MENU, true) == 2);
+static_assert(menuItemToIndex(HomeMenuItem::LIBRARY, false) == 0);
 }  // namespace
 
 int HomeActivity::getMenuItemCount() const {
@@ -86,7 +76,7 @@ int HomeActivity::getMenuItemCount() const {
   if (!recentBooks.empty()) {
     count += recentBooks.size();
   }
-  if (hasLibrarySlot()) {
+  if (true) {  // PaperRead: library slot always present
     count++;
   }
   return count;
@@ -339,8 +329,6 @@ void HomeActivity::loadRecentCovers(int coverHeight) {
 void HomeActivity::onEnter() {
   Activity::onEnter();
 
-  hasOpdsServers = OPDS_STORE.hasServers();
-  hasPlugins = anyPluginInstalled();
 
   const auto& metrics = UITheme::getInstance().getMetrics();
   if (UITheme::getInstance().hasCoverGridHome()) {
@@ -353,14 +341,14 @@ void HomeActivity::onEnter() {
   if (coverGridUi) {
     fillCoverGridFromLibrary();
     resolveGridCoverPaths();
-    coverGridUi->begin(recentBooks, hasLibrarySlot(), hasContinueReading);
+    coverGridUi->begin(recentBooks, true, hasContinueReading);
   }
 
   const auto base = static_cast<int>(recentBooks.size());
   const bool isCarousel =
       static_cast<CrossPointSettings::UI_THEME>(SETTINGS.uiTheme) == CrossPointSettings::UI_THEME::LYRA_CAROUSEL;
   selectorIndex =
-      initialMenuItem == HomeMenuItem::NONE ? 0 : base + menuItemToIndex(initialMenuItem, hasLibrarySlot(), isCarousel);
+      initialMenuItem == HomeMenuItem::NONE ? 0 : base + menuItemToIndex(initialMenuItem, isCarousel);
   lastCarouselBookIndex = 0;
 
   // Trigger first update
@@ -437,7 +425,7 @@ void HomeActivity::loop() {
       return;
     }
     const int menuIndex = selectorIndex - static_cast<int>(recentBooks.size());
-    switch (indexToMenuItem(menuIndex, hasLibrarySlot(), isCarousel)) {
+    switch (indexToMenuItem(menuIndex, isCarousel)) {
       case HomeMenuItem::FILE_BROWSER:
         onFileBrowserOpen();
         break;
@@ -446,12 +434,6 @@ void HomeActivity::loop() {
         break;
       case HomeMenuItem::LIBRARY:
         onLibraryOpen();
-        break;
-      case HomeMenuItem::OPDS_BROWSER:  // the library slot
-        hasPlugins ? onPluginsOpen() : onOpdsBrowserOpen();
-        break;
-      case HomeMenuItem::FILE_TRANSFER:
-        onFileTransferOpen();
         break;
       case HomeMenuItem::SETTINGS_MENU:
         onSettingsOpen();
@@ -693,16 +675,16 @@ void HomeActivity::render(RenderLock&&) {
   const bool isCarousel =
       static_cast<CrossPointSettings::UI_THEME>(SETTINGS.uiTheme) == CrossPointSettings::UI_THEME::LYRA_CAROUSEL;
 
-  const int homeMenuItemCount = hasOpdsServers ? kHomeMenuItemCount : kHomeMenuItemCount - 1;
+  const int homeMenuItemCount = kHomeMenuItemCount;
   const bool showContinueReading = metrics.homeContinueReadingInMenu && !recentBooks.empty();
   std::vector<const char*> menuItems;
   std::vector<UIIcon> menuIcons;
   menuItems.reserve(homeMenuItemCount + (showContinueReading ? 1 : 0));
   menuIcons.reserve(homeMenuItemCount + (showContinueReading ? 1 : 0));
   for (int i = 0; i < homeMenuItemCount; ++i) {
-    const HomeMenuEntry* entry = menuEntryAtIndex(i, hasOpdsServers, isCarousel);
+    const HomeMenuEntry* entry = menuEntryAtIndex(i, isCarousel);
     menuItems.push_back(I18N.get(entry->label));
-    menuIcons.push_back(entry->item == HomeMenuItem::OPDS_BROWSER && hasPlugins ? Plugins : entry->icon);
+    menuIcons.push_back(entry->icon);
   }
 
   if (showContinueReading) {
@@ -827,8 +809,3 @@ void HomeActivity::onLibraryOpen() { activityManager.goToLibrary(); }
 
 void HomeActivity::onSettingsOpen() { activityManager.goToSettings(); }
 
-void HomeActivity::onFileTransferOpen() { activityManager.goToFileTransfer(); }
-
-void HomeActivity::onOpdsBrowserOpen() { activityManager.goToBrowser(); }
-
-void HomeActivity::onPluginsOpen() { activityManager.goToPlugins(hasOpdsServers); }

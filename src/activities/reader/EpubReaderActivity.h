@@ -239,7 +239,6 @@ class EpubReaderActivity final : public ReaderActivity {
   void activateMoreRow(int row);
   void openFootnoteSelect(bool reopenMenuOnCancel);
   void openDictionaryWordSelect();
-  bool launchKOReaderSync();
 #ifdef ENABLE_CHINESE_VERSION
 #endif
   unsigned long confirmLongPressThreshold() const;
@@ -275,7 +274,6 @@ class EpubReaderActivity final : public ReaderActivity {
   bool handleLoadFailure() override;
   // Wi-Fi join + SNTP for a loan whose date could not be verified, then a
   // clean re-open of the book.
-  void beginLoanTimeSync();
   std::string getBookTitle() const override { return epub ? epub->getTitle() : ""; }
   std::string getBookAuthor() const override { return epub ? epub->getAuthor() : ""; }
   std::string getBookThumbBmpPath() const override { return epub ? epub->getThumbBmpPath() : ""; }

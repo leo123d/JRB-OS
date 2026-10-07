@@ -17,7 +17,7 @@
 #include "components/SubpageLayout.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
-#include "network/FirmwareFlasher.h"
+#include "ota/FirmwareFlasher.h"
 
 namespace {
 constexpr unsigned int PROGRESS_REFRESH_STEP_PERCENT = 10;

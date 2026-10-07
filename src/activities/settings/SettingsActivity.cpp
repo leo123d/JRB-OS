@@ -24,16 +24,11 @@
 #include "ClearCacheActivity.h"
 #include "ClockSettingsActivity.h"
 #include "CrossPointSettings.h"
-#include "DictionaryDownloadActivity.h"
-#include "FontDownloadActivity.h"
 #include "HomeButtonSettingsActivity.h"
 #include "InxItemLayout.h"
-#include "KOReaderSettingsActivity.h"
 #include "KeyboardLayoutsActivity.h"
 #include "LanguageSelectActivity.h"
 #include "MappedInputManager.h"
-#include "OpdsServerListActivity.h"
-#include "OtaUpdateActivity.h"
 #include "ReadingStatsSettingsActivity.h"
 #include "SdCardFontSystem.h"
 #include "SdFirmwareUpdateActivity.h"
@@ -42,8 +37,6 @@
 #include "StatusBarSettingsActivity.h"
 #include "TextSettingsActivity.h"
 #include "activities/home/FileBrowserActivity.h"
-#include "activities/network/WifiSelectionActivity.h"
-#include "activities/plugins/PluginCatalogActivity.h"
 #include "activities/util/ConfirmationActivity.h"
 #include "activities/util/IntervalSelectionActivity.h"
 #include "components/SubpageLayout.h"
@@ -810,35 +803,15 @@ void SettingsActivity::toggleCurrentSetting() {
           LOG_ERR("SETTINGS", "OOM: ClockSettingsActivity");
         }
         break;
-      case SettingAction::KOReaderSync:
-        startActivityForResultWith<KOReaderSettingsActivity>(resultHandler);
+case SettingAction::KOReaderSync:
+        // PaperRead: removed with the network stack.
         break;
-      case SettingAction::OPDSBrowser:
-        startActivityForResultWith<OpdsServerListActivity>(resultHandler);
+case SettingAction::OPDSBrowser:
+        // PaperRead: removed with the network stack.
         break;
-      case SettingAction::Network: {
-        auto activity = makeUniqueNoThrow<WifiSelectionActivity>(renderer, mappedInput, false);
-        if (!activity) {
-          LOG_ERR("SETTINGS", "OOM: WifiSelectionActivity");
-          return;
-        }
-        startActivityForResult(std::move(activity), [](const ActivityResult&) {
-          SETTINGS.saveToFile();
-          // Every other WiFi consumer hands the radio to a session it owns;
-          // these rows only save credentials, so nothing here would ever
-          // release the driver's heap. The scan alone brings it up, so tear
-          // down whether or not the user joined a network.
-          if (WiFi.getMode() == WIFI_MODE_NULL) return;
-          WiFi.disconnect(false);
-          delay(30);
-          // Unlike the onExit() teardowns, this runs from the loop task with
-          // no lock held; the restart popup paints straight to the panel.
-          RenderLock lock;
-          silentRestartToSettings();
-        });
-
+case SettingAction::Network:
+        // PaperRead: removed with the network stack.
         break;
-      }
       case SettingAction::ClearCache:
         startActivityForResultWith<ClearCacheActivity>(resultHandler);
         break;
@@ -851,19 +824,11 @@ void SettingsActivity::toggleCurrentSetting() {
       case SettingAction::SdFirmwareUpdate:
         startActivityForResultWith<SdFirmwareUpdateActivity>(resultHandler);
         break;
-      case SettingAction::DownloadFonts:
-        releaseListsForMemoryHungryChild();
-        if (!startActivityForResultWith<FontDownloadActivity>(resultHandler)) {
-          rebuildSettingsLists();
-          requestUpdate();
-        }
+case SettingAction::DownloadFonts:
+        // PaperRead: removed with the network stack.
         break;
-      case SettingAction::ManageDictionaries:
-        startActivityForResultWith<DictionaryDownloadActivity>([this](const ActivityResult&) {
-          SETTINGS.saveToFile();
-          rebuildSettingsLists();
-          requestUpdate();
-        });
+case SettingAction::ManageDictionaries:
+        // PaperRead: removed with the network stack.
         break;
       case SettingAction::TextSettings:
         startActivityForResultWith<TextSettingsActivity>(
@@ -893,8 +858,8 @@ void SettingsActivity::toggleCurrentSetting() {
         else
           startActivityForResultWith<AboutActivity>(resultHandler);
         break;
-      case SettingAction::Plugins:
-        startActivityForResultWith<PluginCatalogActivity>(resultHandler);
+case SettingAction::Plugins:
+        // PaperRead: removed with the network stack.
         break;
       case SettingAction::KeyboardLayouts:
         if (auto activity = makeUniqueNoThrow<KeyboardLayoutsActivity>(renderer, mappedInput)) {
@@ -988,15 +953,8 @@ void SettingsActivity::releaseListsForMemoryHungryChild() {
 }
 
 void SettingsActivity::openOtaUpdate() {
-  releaseListsForMemoryHungryChild();
-
-  if (startActivityForResultWith<OtaUpdateActivity>([this](const ActivityResult&) {
-        SETTINGS.saveToFile();
-        rebuildSettingsLists();
-      })) {
-    return;
-  }
-
+  // PaperRead (decision 6): network OTA is gone. Firmware updates come from the
+  // SD card via SettingAction::SdFirmwareUpdate.
   rebuildSettingsLists();
   requestUpdate();
 }

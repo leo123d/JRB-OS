@@ -21,11 +21,6 @@ class HomeActivity final : public Activity {
   bool recentsLoading = false;
   bool recentsLoaded = false;
   bool firstRenderDone = false;
-  bool hasOpdsServers = false;
-  bool hasPlugins = false;
-  // The home "library" slot (index 2) shows Plugins when any plugin is
-  // installed, otherwise OPDS. The index converters gate on its presence.
-  bool hasLibrarySlot() const { return hasPlugins || hasOpdsServers; }
   bool hasContinueReading = false;
   int lastCarouselBookIndex = 0;
   bool coverRendered = false;           // Track if cover has been rendered once
@@ -49,9 +44,6 @@ class HomeActivity final : public Activity {
   void onLibraryOpen();
   void onRecentsOpen();
   void onSettingsOpen();
-  void onFileTransferOpen();
-  void onOpdsBrowserOpen();
-  void onPluginsOpen();
 
   int getMenuItemCount() const;
   static constexpr bool canRenderCarouselMenuOnly(bool isCarousel, bool recentsLoaded, CarouselUpdateScope scope) {

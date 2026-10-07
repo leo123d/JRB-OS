@@ -12,7 +12,6 @@
 #include <algorithm>
 
 #include "CrossPointSettings.h"
-#include "OpdsServerStore.h"
 #include "components/SubpageLayout.h"
 #ifdef ENABLE_CHINESE_VERSION
 #endif
@@ -20,7 +19,6 @@
 #endif
 #include "boot_sleep/BootActivity.h"
 #include "boot_sleep/SleepActivity.h"
-#include "browser/OpdsBookBrowserActivity.h"
 #include "components/HeaderBackTapTarget.h"
 #include "home/CrashActivity.h"
 #include "home/FileBrowserActivity.h"
@@ -28,11 +26,7 @@
 #include "home/InxRecentActivity.h"
 #include "home/RecentBooksActivity.h"
 #include "library/LibraryListActivity.h"
-#include "network/CrossPointWebServerActivity.h"
-#include "network/UsbDriveActivity.h"
-#include "plugins/PluginCatalogActivity.h"
 #include "reader/ReaderActivity.h"
-#include "settings/OpdsServerListActivity.h"
 #include "settings/SettingsActivity.h"
 #include "util/FrontlightPanelActivity.h"
 #include "util/FullScreenMessageActivity.h"
@@ -152,7 +146,7 @@ void ActivityManager::loop() {
         statusBarTap = mappedInput.wasScreenTapped(tx, ty) && tx >= status.x && tx < status.x + status.width &&
                        ty >= status.y && ty < status.y + status.height;
       } else if (currentActivity->name == "Home" || currentActivity->name == "FileBrowser" ||
-                 currentActivity->name == "Settings" || currentActivity->name == "NetworkModeSelection") {
+                 currentActivity->name == "Settings") {
         statusBarTap =
             mappedInput.wasScreenTapped(tx, ty) && ty >= 0 && ty < 44 && !HeaderBackTapTarget::contains(tx, ty);
       }
@@ -448,27 +442,6 @@ void ActivityManager::replaceActivity(std::unique_ptr<Activity>&& newActivity) {
   }
 }
 
-void ActivityManager::goToFileTransfer() { replaceActivityWith<CrossPointWebServerActivity>(); }
-
-void ActivityManager::goToJoinNetwork() {
-  // Post heap-defrag reboot: enter the web-server activity straight in Join
-  // Network mode (skips mode selection, does not reboot again).
-  replaceActivityWith<CrossPointWebServerActivity>(/*startInJoinNetwork=*/true);
-}
-
-void ActivityManager::goToUsbDrive() {
-#if FREEINK_CAP_USB_MSC
-  auto activity = makeUniqueNoThrow<UsbDriveActivity>(renderer, mappedInput);
-  if (!activity) {
-    LOG_ERR("ACT", "OOM: USB Drive activity");
-    return;
-  }
-  replaceActivity(std::move(activity));
-#else
-  LOG_ERR("ACT", "USB Drive requested in a build without USB Drive capability");
-#endif
-}
-
 void ActivityManager::goToSettings() { replaceActivityWith<SettingsActivity>(); }
 
 
@@ -502,20 +475,6 @@ void ActivityManager::goToLibrary() {
     return;
   }
   replaceActivity(std::move(activity));
-}
-
-void ActivityManager::goToBrowser() {
-  const auto& servers = OPDS_STORE.getServers();
-  // Skip the server picker when there's only one server configured
-  if (servers.size() == 1) {
-    replaceActivityWith<OpdsBookBrowserActivity>(servers[0]);
-  } else {
-    replaceActivityWith<OpdsServerListActivity>(true);
-  }
-}
-
-void ActivityManager::goToPlugins(bool showOpds) {
-  replaceActivityWith<PluginCatalogActivity>(showOpds, /*rootMode=*/true);
 }
 
 void ActivityManager::goToReader(std::string path, const bool allowFastInitialRefresh) {
@@ -563,10 +522,6 @@ void ActivityManager::goHome(HomeMenuItem initialMenuItem) {
       initialMenuItem = HomeMenuItem::FILE_BROWSER;
     } else if (activityName == "Library") {
       initialMenuItem = HomeMenuItem::LIBRARY;
-    } else if (activityName == "OpdsBookBrowser") {
-      initialMenuItem = HomeMenuItem::OPDS_BROWSER;
-    } else if (activityName == "CrossPointWebServer") {
-      initialMenuItem = HomeMenuItem::FILE_TRANSFER;
     } else if (activityName == "Settings") {
       initialMenuItem = HomeMenuItem::SETTINGS_MENU;
     }

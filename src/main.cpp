@@ -35,15 +35,12 @@
 #include "CrossPointState.h"
 #include "KOReaderCredentialStore.h"
 #include "MappedInputManager.h"
-#include "OpdsServerStore.h"
 #include "ReadingStatsStore.h"
 #include "RecentBooksStore.h"
 #include "SdCardFontSystem.h"
-#include "WifiCredentialStore.h"
 #include "activities/Activity.h"
 #include "activities/ActivityManager.h"
 #ifdef ENABLE_CHINESE_VERSION
-#include "activities/settings/FontDownloadActivity.h"
 #include "activities/settings/TextSettingsActivity.h"
 #include "activities/util/ConfirmationActivity.h"
 #endif
@@ -53,7 +50,6 @@
 #include "fontIds.h"
 #include "platform/UsbSerialJtagHandoff.h"
 #include "util/ButtonNavigator.h"
-#include "util/PluginEvents.h"
 #include "util/ScreenshotUtil.h"
 #include "util/Timezones.h"
 #include "util/UserGuide.h"
@@ -404,49 +400,9 @@ static bool loadSleepFrameBuffer() {
 // either way. Deferrable events already queued (reader.exit) ride along in
 // the same drain.
 static void deliverSleepPluginEvents() {
-  // Activity-owned state must be queued before sleep.enter and before this
-  // same-sleep drain. The hook is idempotent with ordinary activity teardown.
+  // PaperRead (decision 6): the plugin event bus and the opportunistic sleep-time
+  // Wi-Fi join are gone. Only the activity-owned state hook remains.
   activityManager.prepareForSleep();
-
-  // Sleeping straight out of a book is the common flow, but the reader's own
-  // reader.exit only fires later, inside goToSleep() — after this drain. Carry
-  // the book and progress on sleep.enter itself so a sync handler bound to it
-  // pushes current progress on THIS connection, not the next one.
-  pluginevents::Var vars[2];
-  size_t varCount = 0;
-  char percent[8];
-  const ScreenshotInfo info = activityManager.getScreenshotInfo();
-  if (info.readerType != ScreenshotInfo::ReaderType::None && !APP_STATE.openEpubPath.empty()) {
-    snprintf(percent, sizeof(percent), "%d", info.progressPercent);
-    vars[varCount++] = {"book", APP_STATE.openEpubPath.c_str()};
-    vars[varCount++] = {"percent", percent};
-  }
-  pluginevents::emit(pluginevents::Event::SleepEnter, vars, varCount);
-  if (WiFi.status() == WL_CONNECTED) {
-    pluginevents::drain(&renderer);
-    return;
-  }
-  // Any connect-flagged queued event justifies the join, not only
-  // sleep.enter: reader.session is queued while reading and delivered on this
-  // same sleep, and a progress-sync plugin usually subscribes to it alone.
-  if (!pluginevents::wantsConnectAny()) return;
-  if (powerManager.getBatteryPercentage() < 20) return;
-  const auto cred = WIFI_STORE.findCredential(WIFI_STORE.getLastConnectedSsid());
-  if (!cred) return;
-
-  GUI.drawPopup(renderer, tr(STR_LOADING_POPUP));
-  WiFi.mode(WIFI_STA);
-  WiFi.begin(cred->ssid.c_str(), cred->password.c_str());
-  const unsigned long joinDeadline = millis() + 10000;
-  while (WiFi.status() != WL_CONNECTED && millis() < joinDeadline) {
-    delay(100);
-  }
-  if (WiFi.status() == WL_CONNECTED) {
-    trustedtime::startSync();  // snap the clock floor while the network is up
-    pluginevents::drain(&renderer);
-  } else {
-    LOG_DBG("MAIN", "Sleep-event WiFi join timed out; deferring delivery");
-  }
 }
 
 // Enter deep sleep mode
@@ -641,16 +597,10 @@ void continueChineseFontInstall(const uint8_t expectedPointSize) {
   }
 
   if (!fontReady) {
-    auto error = makeUniqueNoThrow<FontDownloadActivity>(renderer, mappedInputManager,
-                                                         FontDownloadActivity::Purpose::ReaderAutoInstall,
-                                                         FontDownloadActivity::StartMode::ResumeFontLoadError);
-    if (!error) {
-      LOG_ERR("FONT", "OOM allocating resumed FontDownloadActivity (%zu bytes)", sizeof(FontDownloadActivity));
-      return;
-    }
-    activityManager.pushActivity(std::move(error));
-    activityManager.loop();
-    return;
+    // PaperRead: fonts are embedded, so there is no downloader to offer. The
+    // stale family selection was already cleared above; fall through to the
+    // text-settings prompt so the user can pick a working font.
+    LOG_ERR("FONT", "Font not ready after clean restart; falling back to text settings");
   }
 
   auto textSettings = makeUniqueNoThrow<TextSettingsActivity>(
@@ -745,7 +695,6 @@ void setup() {
 #ifdef ENABLE_CHINESE_VERSION
   if (snapshotTarget == SilentRebootTarget::ReaderSuppressFontPrompt ||
       snapshotTarget == SilentRebootTarget::ReaderPreloadChineseFont) {
-    FontDownloadActivity::suppressChineseFontPromptThisBoot();
   }
 #endif
   const bool silentRebootLightOn = isSilentReboot && (silentRebootPayload & SILENT_REBOOT_LIGHT_ON) != 0;
@@ -845,10 +794,8 @@ void setup() {
   ACHIEVEMENTS.loadFromFile();
   I18N.setLanguage(static_cast<Language>(SETTINGS.language));
   KOREADER_STORE.loadFromFile();
-  OPDS_STORE.loadFromFile();
   UITheme::getInstance().reload();
   ButtonNavigator::setMappedInputManager(mappedInputManager);
-  pluginevents::refreshSubscriptions();
   // Restore the monotonic clock floor before anything reads time() (event
   // timestamps, loan-expiry checks).
   trustedtime::init();
@@ -986,7 +933,8 @@ void setup() {
              !APP_STATE.openEpubPath.empty()) {
     activityManager.goToReader(APP_STATE.openEpubPath);
   } else if (resume == BootResume::Silent && snapshotTarget == SilentRebootTarget::JoinNetwork) {
-    activityManager.goToJoinNetwork();
+    // PaperRead (decision 6): the network stack is gone; land on Home instead.
+    activityManager.goHome();
   } else if (resume == BootResume::Silent && snapshotTarget == SilentRebootTarget::Settings) {
     // Back out of the WiFi rows and the user is where they left off, not on Home.
     activityManager.goToSettings();

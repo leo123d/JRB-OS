@@ -20,7 +20,7 @@
 class Activity;    // forward declaration
 class RenderLock;  // forward declaration
 
-enum class HomeMenuItem { NONE, FILE_BROWSER, RECENTS, LIBRARY, OPDS_BROWSER, FILE_TRANSFER, SETTINGS_MENU, APPS };
+enum class HomeMenuItem { NONE, FILE_BROWSER, RECENTS, LIBRARY, SETTINGS_MENU };
 
 /**
  * ActivityManager
@@ -114,17 +114,12 @@ class ActivityManager {
   }
 
   // goTo... functions are convenient wrapper for replaceActivity()
-  void goToFileTransfer();
-  void goToJoinNetwork();  // File Transfer straight into Join Network (post heap-defrag reboot)
-  void goToUsbDrive();
   void goToSettings();
   void goToInxRecent();
   void goToMainTab(MainTab tab);
   void goToFileBrowser(std::string path = {});
   void goToLibrary();
   void goToRecentBooks();
-  void goToBrowser();
-  void goToPlugins(bool showOpds);
   void goToReader(std::string path, bool allowFastInitialRefresh = false);
   void goToSleep(bool fromTimeout = false);
   void goToBoot();

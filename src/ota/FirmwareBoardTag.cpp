@@ -1,5 +1,5 @@
-#include "FirmwareBoardTag.h"
 
+#include "FirmwareBoardTag.h"
 #include <BoardConfig.h>
 
 #include <cstring>

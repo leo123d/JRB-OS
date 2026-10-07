@@ -18,12 +18,10 @@
 
 #include "CrossPointSettings.h"
 #include "MappedInputManager.h"
-#include "NetworkStartup.h"
 #include "ReaderFontSizes.h"
 #include "SdCardFontSystem.h"
 #include "TextSettingsPreview.h"
 #ifdef ENABLE_CHINESE_VERSION
-#include "activities/settings/FontDownloadActivity.h"
 #endif
 #include "activities/util/IntervalSelectionActivity.h"
 #include "components/FontPreloadView.h"
@@ -787,7 +785,6 @@ const SdCardFontFileInfo* TextSettingsActivity::fontFileForFamily(const int list
 }
 
 SdCardFontCache::Result TextSettingsActivity::preloadFont(const SdCardFontFileInfo& file, const char* familyName) {
-  NetworkStartup::logMemory("font preload begin");
   {
     RenderLock lock(*this);
     preloadFamilyName_ = familyName;
@@ -825,7 +822,6 @@ SdCardFontCache::Result TextSettingsActivity::preloadFont(const SdCardFontFileIn
       this);
 
   LOG_INF("SDFCACHE", "Manual preload: %s", SdCardFontCache::resultName(result));
-  NetworkStartup::logMemory("font preload finished");
   const bool succeeded = result == SdCardFontCache::Result::Ok || result == SdCardFontCache::Result::AlreadyCached;
   if (succeeded) {
     requestUpdateAndWait();
@@ -965,21 +961,9 @@ bool TextSettingsActivity::handleHomeGesture() {
 }
 
 void TextSettingsActivity::maybeOfferCompleteChineseFont() {
-  if (FontDownloadActivity::wasChineseFontPromptShownThisBoot() || SETTINGS.sdFontFamilyName[0] != '\0' ||
-      SETTINGS.fontPointSize < 14) {
-    return;
-  }
-
+  // PaperRead: the Chinese font is embedded in the firmware, so there is nothing
+  // to download and no prompt to show.
   SETTINGS.saveToFile();
-  auto downloader = makeUniqueNoThrow<FontDownloadActivity>(
-      renderer, mappedInput, FontDownloadActivity::Purpose::PromptThenManage,
-      startMode_ == StartMode::PreviewOnly ? FontDownloadActivity::StartMode::PreviewOnly
-                                           : FontDownloadActivity::StartMode::Normal);
-  if (!downloader) {
-    LOG_ERR("FONT", "OOM allocating FontDownloadActivity (%zu bytes)", sizeof(FontDownloadActivity));
-    return;
-  }
-  startActivityForResult(std::move(downloader), [this](const ActivityResult&) { requestUpdate(); });
 }
 
 TextSettingsActivity::StyleRow TextSettingsActivity::styleRowAt(int visibleIndex) const {

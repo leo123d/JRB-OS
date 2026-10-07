@@ -8,7 +8,6 @@
 
 #include <memory>
 
-#include "ClockSyncActivity.h"
 #include "CrossPointSettings.h"
 #include "DateTimeSettingsActivity.h"
 #include "MappedInputManager.h"
@@ -106,11 +105,7 @@ void ClockSettingsActivity::activateIndex(const int index) {
       SETTINGS.clockShowInHeader = (SETTINGS.clockShowInHeader + 1) % 2;
       break;
     case ITEM_SYNC:
-      if (auto activity = makeUniqueNoThrow<ClockSyncActivity>(renderer, mappedInput)) {
-        startActivityForResult(std::move(activity), onChildResult);
-      } else {
-        LOG_ERR("CLKSET", "OOM: ClockSyncActivity");
-      }
+      // PaperRead: clock sync removed (decisions 6 + 8).
       return;
     default:
       return;

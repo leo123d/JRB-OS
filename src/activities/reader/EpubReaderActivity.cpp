@@ -16,7 +16,6 @@
 #include <SdCardFontCache.h>
 #include <TrustedTime.h>
 #include <Txt.h>
-#include <WiFi.h>
 #include <esp_system.h>
 
 #include <algorithm>
@@ -39,7 +38,6 @@
 #include "EpubReaderPercentSelectionActivity.h"
 #include "EpubReaderUtils.h"
 #include "KOReaderCredentialStore.h"
-#include "KOReaderSyncActivity.h"
 #include "MappedInputManager.h"
 #include "ProgressMapper.h"
 #include "QrDisplayActivity.h"
@@ -51,7 +49,6 @@
 #include "RecentBooksStore.h"
 #include "SdCardFontSystem.h"
 #include "SilentRestart.h"
-#include "activities/network/WifiSelectionActivity.h"
 #include "activities/settings/TextSettingsActivity.h"
 #include "components/FontPreloadView.h"
 #include "util/BookCacheUtils.h"
@@ -60,7 +57,6 @@
 #include "util/ReadingGuideLine.h"
 #ifdef ENABLE_CHINESE_VERSION
 
-#include "activities/settings/FontDownloadActivity.h"
 #endif
 #include "components/UITheme.h"
 #include "fontIds.h"
@@ -584,27 +580,10 @@ void EpubReaderActivity::openDictionaryWordSelect() {
 
 #ifdef ENABLE_CHINESE_VERSION
 bool EpubReaderActivity::maybeOfferCompleteChineseFont() {
-  if (SETTINGS.sdFontFamilyName[0] != '\0') {
-    pendingMissingChineseCodepoint_.store(0, std::memory_order_relaxed);
-    return false;
-  }
-
-  const uint32_t codepoint = pendingMissingChineseCodepoint_.exchange(0, std::memory_order_relaxed);
-  if (codepoint == 0 || FontDownloadActivity::wasChineseFontPromptShownThisBoot()) return false;
-
-  LOG_INF("FONT", "Missing built-in Chinese glyph U+%04X; offering automatic NotoSansSC install",
-          static_cast<unsigned>(codepoint));
-  auto downloader =
-      makeUniqueNoThrow<FontDownloadActivity>(renderer, mappedInput, FontDownloadActivity::Purpose::ReaderAutoInstall);
-  if (!downloader) {
-    LOG_ERR("FONT", "OOM allocating FontDownloadActivity (%zu bytes)", sizeof(FontDownloadActivity));
-    return false;
-  }
-  startActivityForResult(std::move(downloader), [this](const ActivityResult&) {
-    READING_STATS.resumeSession();
-    requestUpdate();
-  });
-  return true;
+  // PaperRead: the Chinese font is embedded in the firmware, so there is nothing
+  // to download. Any missing glyph is simply rendered as a placeholder.
+  pendingMissingChineseCodepoint_.store(0, std::memory_order_relaxed);
+  return false;
 }
 #endif
 void EpubReaderActivity::openFootnoteSelect(const bool reopenMenuOnCancel) {
@@ -826,7 +805,6 @@ void EpubReaderActivity::loop() {
         requestUpdate();
         break;
       case CrossPointSettings::LP_MENU_KOSYNC:
-        if (mappedInput.getHeldTime() >= ReaderUtils::GO_HOME_MS && launchKOReaderSync()) return;
         break;
       case CrossPointSettings::LP_MENU_DICTIONARY:
         if (mappedInput.getHeldTime() >= ReaderUtils::BOOKMARK_HOLD_MS) {
@@ -852,7 +830,6 @@ void EpubReaderActivity::loop() {
         }
         return;
       case HomeButtonAction::Sync:
-        launchKOReaderSync();
         return;
       case HomeButtonAction::Dictionary:
         if (!showDictionaryMessage) openDictionaryWordSelect();
@@ -1218,7 +1195,6 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
       break;
     }
     case EpubReaderMenuActivity::MenuAction::SYNC: {
-      launchKOReaderSync();
       break;
     }
     case EpubReaderMenuActivity::MenuAction::BOOKMARKS: {
@@ -1247,54 +1223,6 @@ unsigned long EpubReaderActivity::confirmLongPressThreshold() const {
       return 0;
   }
 }
-
-bool EpubReaderActivity::launchKOReaderSync() {
-  if (!KOREADER_STORE.hasCredentials()) return false;
-
-  RenderLock renderLock;
-
-  const int currentPage = section ? section->currentPage : nextPageNumber;
-  const int totalPages = section ? section->estimatedTotalPages() : cachedChapterTotalPageCount;
-
-  CrossPointPosition localPos = getCurrentPosition();
-  SavedProgressPosition localKoPos;
-  std::string localChapterName = currentChapterTitle();
-  const std::string savedEpubPath = epub->getPath();
-
-  if (!saveProgress(currentSpineIndex, currentPage, totalPages)) {
-    LOG_ERR("KOSync", "Aborting sync because current progress could not be saved");
-    pendingSyncSaveError = true;
-    requestUpdate();
-    return true;
-  }
-
-  LOG_DBG("KOSync", "Releasing epub for sync (heap before: %u)", (unsigned)ESP.getFreeHeap());
-  {
-    if (section) {
-      nextPageNumber = section->currentPage;
-    }
-    discardOverlayPage();
-    ImageBlock::releaseRenderCache();
-    ImageBlock::setExtractor(nullptr, nullptr);
-    section.reset();
-    if (auto* fcm = renderer.getFontCacheManager()) {
-      fcm->releaseSdFontCaches();
-    }
-    // No rendering may run while the chapter mapper borrows the framebuffer.
-    {
-      GfxRenderer::FrameBufferLoan loan(renderer);
-      localKoPos = ProgressMapper::toSavedProgress(epub, localPos);
-    }
-    // The destructor can no longer save the back-stack once epub is gone.
-    if (footnoteDepth > 0) saveLinkStack();
-    epub.reset();
-  }
-  LOG_DBG("KOSync", "Epub released (heap after: %u)", (unsigned)ESP.getFreeHeap());
-
-  return activityManager.replaceActivityWith<KOReaderSyncActivity>(savedEpubPath, localPos, std::move(localKoPos),
-                                                                   std::move(localChapterName));
-}
-
 
 void EpubReaderActivity::applyInitialOrientation() {
   ReaderActivity::applyInitialOrientation();
@@ -1435,51 +1363,13 @@ bool EpubReaderActivity::handleLoadFailure() {
                             I18N.get(StrId::STR_OK_BUTTON)};
   loadFailurePopup.showMessage("", I18N.get(msg), options, offerSync ? 2 : 1, 0, [this, offerSync](const int index) {
     if (offerSync && index == 0) {
-      beginLoanTimeSync();
+      finish();  // PaperRead: loan-time sync needs Wi-Fi + clock
       return;
     }
     finish();
   });
   requestUpdate();
   return true;  // stay alive; the popup's Back dismiss lands in loop()'s !epub finish
-}
-
-void EpubReaderActivity::beginLoanTimeSync() {
-  auto wifi = makeUniqueNoThrow<WifiSelectionActivity>(renderer, mappedInput);
-  if (!wifi) {
-    LOG_ERR("ERS", "OOM: Wi-Fi selection for loan time sync");
-    finish();
-    return;
-  }
-  startActivityForResult(std::move(wifi), [this](const ActivityResult& result) {
-    if (result.isCancelled || WiFi.status() != WL_CONNECTED) {
-      finish();
-      return;
-    }
-    GUI.drawPopup(renderer, tr(STR_SYNCING_TIME));
-    const bool synced = trustedtime::syncNow(5000);
-    WiFi.disconnect(false);
-    delay(30);
-    if (!synced) {
-      // Reopening would hit the same unverified-time refusal: offer a retry.
-      const char* options[2] = {I18N.get(StrId::STR_RETRY), I18N.get(StrId::STR_OK_BUTTON)};
-      loadFailurePopup.showMessage("", I18N.get(StrId::STR_CLOCK_SYNC_FAIL), options, 2, 0, [this](const int index) {
-        if (index == 0) {
-          beginLoanTimeSync();
-          return;
-        }
-        finish();
-      });
-      requestUpdate();
-      return;
-    }
-    APP_STATE.openEpubPath = bookPath;
-    APP_STATE.saveToFile();
-    // Reboot straight back into this book with a clean heap (no-op on touch
-    // boards, which fall through to the in-place relaunch below).
-    silentRestartToReader();
-    activityManager.goToReader(bookPath);
-  });
 }
 
 bool EpubReaderActivity::isAtEndOfBook() const { return epub && currentSpineIndex >= epub->getSpineItemsCount(); }
@@ -2448,10 +2338,7 @@ void EpubReaderActivity::renderContents(std::unique_ptr<Page> page, const int or
 #else
   const uint32_t missingCodepoint = fcm->consumeMissingChineseCodepoint();
 #endif
-  if (missingCodepoint != 0 && !FontDownloadActivity::wasChineseFontPromptShownThisBoot()) {
-    uint32_t expected = 0;
-    pendingMissingChineseCodepoint_.compare_exchange_strong(expected, missingCodepoint, std::memory_order_relaxed);
-  }
+  (void)missingCodepoint;  // PaperRead: no font-download prompt
 #endif
   renderStatusBar();
   const auto tBwRender = millis();
