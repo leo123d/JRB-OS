@@ -211,7 +211,7 @@ StartResult ensureStarted(GfxRenderer& renderer, const StartContext context) {
 #endif
 
   HalPowerManager::Lock powerLock;
-  if (!BleHid.begin("CrossMux")) {
+  if (!BleHid.begin("JRB OS")) {
     reportStartFailure(GateFailure::HostStart, context, before, readMemory());
     return StartResult::Failed;
   }
