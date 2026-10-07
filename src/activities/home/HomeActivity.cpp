@@ -13,16 +13,20 @@
 #include <Xtc.h>
 
 #include <algorithm>
+#include <cstdio>
 #include <cstring>
 #include <vector>
 
 #include "CrossPointSettings.h"
 #include "CrossPointState.h"
 #include "MappedInputManager.h"
+#include "ReadingStatsStore.h"
 #include "RecentBooksStore.h"
 #include "components/UITheme.h"
+#include "components/themes/inx/InxTheme.h"
 #include "fontIds.h"
 #include "util/BookCoverLoader.h"
+#include "util/ReadingStatsAnalytics.h"
 
 namespace {
 struct HomeMenuEntry {
@@ -663,6 +667,39 @@ void HomeActivity::loop() {
   }
 }
 
+#if FREEINK_DEVICE_READPICO
+// ---------------------------------------------------------------------------
+// PaperRead home (UI spec S-1). The layout is fixed-geometry: every offset
+// below is taken verbatim from the spec table so the panel matches the
+// simulator. The tab bar is drawn separately by the shared Activity chrome.
+// ---------------------------------------------------------------------------
+namespace paperread_home {
+// Spec S-1 constants (px, screen-absolute; panel is 684x1216 portrait).
+constexpr int kSideMargin = 32;         // S-1.1 / S-1.3 / S-1.4
+constexpr int kMastheadTop = 5;
+constexpr int kMastheadHeight = 64;     // y5-69
+constexpr int kHeroTop = 97;
+constexpr int kHeroCoverWidth = 200;
+constexpr int kHeroCoverHeight = 283;
+constexpr int kHeroGap = 32;
+constexpr int kButtonTop = 430;
+constexpr int kButtonHeight = 96;       // y430-526
+constexpr int kDividerY = 566;
+constexpr int kRecentLabelY = 590;
+constexpr int kCardRowY = 630;
+constexpr int kCardCoverWidth = 150;
+constexpr int kCardCoverHeight = 212;
+constexpr int kStatsDividerY = 924;
+constexpr int kStatLine1Y = 966;
+constexpr int kStatLine2Y = 998;
+constexpr int kTabBarTop = 1112;        // reserved; chrome draws into it
+
+// Home body palette: only ink + the 4-step grey (spec R-3).
+constexpr freeink::ui::Color kInk = freeink::ui::Color::Black;
+constexpr freeink::ui::Color kGray = freeink::ui::Color::DarkGray;
+}  // namespace paperread_home
+#endif  // FREEINK_DEVICE_READPICO
+
 void HomeActivity::render(RenderLock&&) {
   static_assert(canRenderCarouselMenuOnly(true, true, CarouselUpdateScope::MenuOnly));
   static_assert(!canRenderCarouselMenuOnly(false, true, CarouselUpdateScope::MenuOnly));
@@ -674,6 +711,30 @@ void HomeActivity::render(RenderLock&&) {
   const auto pageHeight = renderer.getScreenHeight();
   const bool isCarousel =
       static_cast<CrossPointSettings::UI_THEME>(SETTINGS.uiTheme) == CrossPointSettings::UI_THEME::LYRA_CAROUSEL;
+
+#if FREEINK_DEVICE_READPICO
+  // PaperRead home (spec S-1) replaces the generic carousel/list home entirely.
+  // The stack of covers still needs the shared loader, so keep recents warm.
+  if (!firstRenderDone) {
+    firstRenderDone = true;
+    requestUpdate();
+  } else if (!recentsLoaded && !recentsLoading) {
+    recentsLoading = true;
+    const int themeThumbHeight = GUI.homeCoverThumbHeight(renderer);
+    loadRecentCovers(themeThumbHeight > 0 ? themeThumbHeight : std::max(paperread_home::kHeroCoverHeight,
+                                                                        paperread_home::kCardCoverHeight));
+  }
+  renderer.clearScreen();
+  renderPaperReadHome();
+  // Spec S-1.9: the persistent bottom bar is the home page's only chrome.
+  if (usesMainTabBar()) {
+    const MainTabLayout tabLayout = mainTabLayout();
+    GUI.drawMainTabBar(renderer, tabLayout.tabBar, MainTab::Home);
+    if (tabLayout.statusBar.height > 0) GUI.drawMainTabStatusBar(renderer, tabLayout.statusBar);
+  }
+  renderer.displayBuffer();
+  return;
+#endif
 
   const int homeMenuItemCount = kHomeMenuItemCount;
   const bool showContinueReading = metrics.homeContinueReadingInMenu && !recentBooks.empty();
@@ -798,6 +859,190 @@ void HomeActivity::render(RenderLock&&) {
     loadRecentCovers(themeThumbHeight > 0 ? themeThumbHeight : metrics.homeCoverHeight);
   }
 }
+
+#if FREEINK_DEVICE_READPICO
+void HomeActivity::renderPaperReadHome() {
+  using namespace paperread_home;
+  const int pageWidth = renderer.getScreenWidth();
+  const int contentWidth = pageWidth - kSideMargin * 2;
+
+  int top = 0;
+  int right = 0;
+  int bottom = 0;
+  int left = 0;
+  renderer.getOrientedViewableTRBL(&top, &right, &bottom, &left);
+  (void)top;
+  (void)right;
+  (void)bottom;
+  (void)left;
+
+  // -- S-1.1 masthead: 「小纸」21px + 「· 纯阅读」15px gray + battery, 1px gray rule
+  // px->pt is /(4/3): 21px ~ 16pt, 15px ~ 12pt (spec R-8).
+  const int brandFont = NOTOSERIF_16_FONT_ID;
+  const int brandSubFont = NOTOSERIF_12_FONT_ID;
+  const int brandBaseline = kMastheadTop + 20;
+  renderer.drawText(brandFont, kSideMargin, brandBaseline, "小纸", true);
+  const int brandWidth = renderer.getTextWidth(brandFont, "小纸");
+  renderer.drawText(brandSubFont, kSideMargin + brandWidth + 8, brandBaseline + 5, "· 纯阅读");
+  GUI.drawBatteryRight(
+      renderer,
+      Rect{pageWidth - kSideMargin - InxMetrics::values.batteryWidth, brandBaseline,
+           InxMetrics::values.batteryWidth, InxMetrics::values.batteryHeight},
+      SETTINGS.hideBatteryPercentage != CrossPointSettings::HIDE_BATTERY_PERCENTAGE::HIDE_ALWAYS);
+  renderer.drawLine(kSideMargin, kMastheadTop + kMastheadHeight, pageWidth - kSideMargin - 1,
+                    kMastheadTop + kMastheadHeight, false);
+
+  // -- S-1.2 hero book: 200x283 cover + metadata column (title 26px -> 18pt) --
+  const bool hasHero = !recentBooks.empty();
+  const RecentBook* hero = hasHero ? &recentBooks[0] : nullptr;
+  const ReadingBookStats* heroStats =
+      hasHero ? READING_STATS.findMatchingBookForPath(hero->path, hero->title, hero->author) : nullptr;
+  const int heroPct = heroStats ? heroStats->lastProgressPercent : 0;
+  const char* heroChapter = heroStats && !heroStats->chapterTitle.empty() ? heroStats->chapterTitle.c_str() : nullptr;
+
+  const Rect heroCover{kSideMargin, kHeroTop, kHeroCoverWidth, kHeroCoverHeight};
+  if (hero) drawPaperReadCover(*hero, heroCover, 20);
+
+  const int textX = kSideMargin + kHeroCoverWidth + kHeroGap;
+  const int textWidth = pageWidth - kSideMargin - textX;
+  const int heroTextY = kHeroTop + 10;  // right column padding-top 10
+  if (hero) {
+    const std::string title = renderer.truncatedText(NOTOSERIF_18_FONT_ID, hero->title.c_str(), textWidth,
+                                                     EpdFontFamily::BOLD);
+    renderer.drawText(NOTOSERIF_18_FONT_ID, textX, heroTextY, title.c_str(), true, EpdFontFamily::BOLD);
+    if (!hero->author.empty()) {
+      // mt12 (12px ~ 9pt) below the title.
+      const std::string author = renderer.truncatedText(NOTOSERIF_12_FONT_ID, hero->author.c_str(), textWidth);
+      renderer.drawText(NOTOSERIF_12_FONT_ID, textX, heroTextY + 36, author.c_str());
+    }
+    if (heroChapter) {
+      // mt44 from the author line: chapter sits lower in the column.
+      const std::string chap = renderer.truncatedText(NOTOSERIF_12_FONT_ID, heroChapter, textWidth);
+      renderer.drawText(NOTOSERIF_12_FONT_ID, textX, heroTextY + 92, chap.c_str());
+    }
+    // Dots (10) + 「N%」, mt16 below the chapter line.
+    const int dotsY = heroTextY + 124;
+    const int dotsWidth = paperreadDots(renderer, textX, dotsY, heroPct, 10);
+    char pct[8];
+    snprintf(pct, sizeof(pct), "%d%%", heroPct);
+    renderer.drawText(SMALL_FONT_ID, textX + dotsWidth + 12, dotsY - 4, pct);
+  }
+
+  // -- S-1.3 「继　续　阅　读」 inverse button (24px -> 18pt, tracking) --------
+  const int buttonY = kButtonTop;
+  if (hasHero) {
+    renderer.fillRect(kSideMargin, buttonY, contentWidth, kButtonHeight, true);
+    // Spec letter-spacing 6px is realised with full-width spaces between glyphs.
+    const char* label = "继　续　阅　读";
+    const int labelWidth = renderer.getTextWidth(NOTOSERIF_18_FONT_ID, label, EpdFontFamily::BOLD);
+    renderer.drawText(NOTOSERIF_18_FONT_ID, kSideMargin + (contentWidth - labelWidth) / 2,
+                      buttonY + (kButtonHeight - renderer.getLineHeight(NOTOSERIF_18_FONT_ID)) / 2, label, false,
+                      EpdFontFamily::BOLD);
+  }
+  heroButtonRect = hasHero ? Rect{kSideMargin, buttonY, contentWidth, kButtonHeight} : Rect{};
+
+  // -- S-1.4 divider --------------------------------------------------------
+  renderer.drawLine(kSideMargin, kDividerY, pageWidth - kSideMargin - 1, kDividerY, false);
+
+  // -- S-1.5 「最近翻过」 three cards ---------------------------------------
+  renderer.drawText(NOTOSERIF_12_FONT_ID, kSideMargin, kRecentLabelY, tr(STR_TAB_RECENT));
+  const int cardCount = std::min<int>(3, static_cast<int>(recentBooks.size()));
+  cardRects.clear();
+  cardRects.reserve(cardCount);
+  if (cardCount > 0) {
+    const int cardsTotal = kCardCoverWidth * 3;
+    const int gap = std::max(0, (contentWidth - cardsTotal) / 2);
+    for (int i = 0; i < cardCount; ++i) {
+      const RecentBook& book = recentBooks[i];
+      const int cardX = kSideMargin + i * (kCardCoverWidth + gap);
+      const Rect cover{cardX, kCardRowY, kCardCoverWidth, kCardCoverHeight};
+      drawPaperReadCover(book, cover, 16);
+      cardRects.push_back(cover);
+      const ReadingBookStats* stats = READING_STATS.findMatchingBookForPath(book.path, book.title, book.author);
+      const std::string cardTitle =
+          renderer.truncatedText(NOTOSERIF_12_FONT_ID, book.title.c_str(), kCardCoverWidth + 10);
+      renderer.drawText(SMALL_FONT_ID, cardX, kCardRowY + kCardCoverHeight + 10, cardTitle.c_str());
+      if (stats && stats->completed) {
+        renderer.drawText(SMALL_FONT_ID, cardX, kCardRowY + kCardCoverHeight + 36, tr(STR_BOOKS_FINISHED));
+      } else {
+        paperreadDots(renderer, cardX, kCardRowY + kCardCoverHeight + 44,
+                      stats ? stats->lastProgressPercent : 0, 8);
+      }
+    }
+  }
+
+  // -- S-1.6 stats (two 16px gray lines under a 1px rule) --------------------
+  renderer.drawLine(kSideMargin, kStatsDividerY, pageWidth - kSideMargin - 1, kStatsDividerY, false);
+  const uint64_t totalMs = READING_STATS.getTotalReadingMs();
+  const uint64_t totalMinutes = totalMs / 60000ULL;
+  char line1[64];
+  snprintf(line1, sizeof(line1), tr(STR_STATS_DURATION_HM_FMT), static_cast<unsigned>(totalMinutes / 60ULL),
+           static_cast<unsigned>(totalMinutes % 60ULL));
+  renderer.drawText(NOTOSERIF_12_FONT_ID, kSideMargin, kStatLine1Y, line1);
+
+  // Average session = total reading time / total recorded sessions.
+  uint64_t totalSessions = 0;
+  for (const ReadingBookStats& b : READING_STATS.getBooks()) totalSessions += b.sessions;
+  const unsigned avgMinutes =
+      totalSessions > 0 ? static_cast<unsigned>(totalMinutes / totalSessions) : 0;
+  char seg[48];
+  char line2[160];
+  line2[0] = '\0';
+  snprintf(seg, sizeof(seg), tr(STR_STATS_READ_FMT), static_cast<unsigned>(READING_STATS.getBooksStartedCount()));
+  snprintf(line2, sizeof(line2), "%s", seg);
+  snprintf(seg, sizeof(seg), tr(STR_STATS_FINISHED_FMT),
+           static_cast<unsigned>(READING_STATS.getBooksFinishedCount()));
+  snprintf(line2 + strlen(line2), sizeof(line2) - strlen(line2), " · %s", seg);
+  snprintf(seg, sizeof(seg), tr(STR_STATS_AVG_SESSION_FMT), avgMinutes);
+  snprintf(line2 + strlen(line2), sizeof(line2) - strlen(line2), " · %s", seg);
+  renderer.drawText(NOTOSERIF_12_FONT_ID, kSideMargin, kStatLine2Y, line2);
+}
+
+int HomeActivity::paperreadDots(const GfxRenderer& r, const int x, const int y, const int percent, const int count) {
+  constexpr int kDot = 6;
+  constexpr int kGap = 5;
+  const int filled = std::clamp(percent * count / 100, 0, count);
+  for (int i = 0; i < count; ++i) {
+    const int cx = x + i * (kDot + kGap);
+    if (i < filled)
+      r.fillRect(cx, y, kDot, kDot, true);
+    else
+      r.drawRect(cx, y, kDot, kDot, true);
+  }
+  return count * (kDot + kGap) - kGap;
+}
+
+void HomeActivity::drawPaperReadCover(const RecentBook& book, const Rect& rect, int fontSize) {
+  // Deterministic generated cover (spec §4): 1px frame, 1px inner liner inset
+  // 5px, dither base, vertical title, publisher line. A real thumbnail, when
+  // present and cached, is drawn crop-filled instead.
+  std::string coverPath;
+  if (!book.coverBmpPath.empty()) {
+    const std::string thumb = UITheme::getCoverThumbPath(book.coverBmpPath, rect.height);
+    if (Storage.exists(thumb.c_str())) coverPath = thumb;
+  }
+  if (!coverPath.empty()) {
+    HalFile file;
+    if (Storage.openFileForRead("HOME", coverPath, file)) {
+      Bitmap bitmap(file);
+      if (bitmap.parseHeaders() == BmpReaderError::Ok && renderer.drawBitmapCropToFill(bitmap, rect.x, rect.y,
+                                                                                       rect.width, rect.height)) {
+        renderer.drawRect(rect.x, rect.y, rect.width, rect.height, true);
+        return;
+      }
+    }
+  }
+  renderer.fillRect(rect.x, rect.y, rect.width, rect.height, false);
+  renderer.fillRectDither(rect.x + 1, rect.y + 1, rect.width - 2, rect.height - 2, Color::LightGray);
+  renderer.drawRect(rect.x, rect.y, rect.width, rect.height, true);
+  renderer.drawRect(rect.x + 5, rect.y + 5, rect.width - 10, rect.height - 10, true);
+  // Vertical title, centered.
+  const std::string title = book.title.empty() ? book.path : book.title;
+  renderer.drawTextRotated90CW(fontSize, rect.x + rect.width / 2 + fontSize / 2, rect.y + rect.height / 2 +
+                                                                                    (int)title.size() * fontSize / 2,
+                               title.c_str());
+}
+#endif  // FREEINK_DEVICE_READPICO
 
 void HomeActivity::onSelectBook(const std::string& path) { activityManager.goToReader(path); }
 

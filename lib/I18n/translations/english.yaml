@@ -1221,3 +1221,10 @@ STR_NO_RECENT_BOOKS: "No recent books"
 STR_NO_FOOTNOTES: "No footnotes on this page"
 
 STR_TXT_PROGRESS_MIGRATION_FAILED: "Could not restore text-book progress. The original progress is kept. Check the SD card and retry."
+
+STR_TAB_HOME: "Home"
+STR_TAB_RECENT: "Recent"
+STR_STATS_DURATION_HM_FMT: "%u h %u m"
+STR_STATS_READ_FMT: "%u books read"
+STR_STATS_FINISHED_FMT: "%u finished"
+STR_STATS_AVG_SESSION_FMT: "%u min avg"

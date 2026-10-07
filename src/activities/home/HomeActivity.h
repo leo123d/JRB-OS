@@ -59,6 +59,15 @@ class HomeActivity final : public Activity {
   void resolveGridCoverPaths();
   void loadGridCover(RecentBook& book, int height, bool& showingLoading, Rect& popupRect);
 
+#if FREEINK_DEVICE_READPICO
+  // PaperRead spec S-1 home. Fixed-geometry page; see HomeActivity.cpp.
+  void renderPaperReadHome();
+  void drawPaperReadCover(const RecentBook& book, const Rect& rect, int fontSize);
+  static int paperreadDots(const GfxRenderer& renderer, int x, int y, int percent, int count);
+  Rect heroButtonRect;
+  std::vector<Rect> cardRects;
+#endif
+
  public:
   explicit HomeActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
                         HomeMenuItem initialMenuItemValue = HomeMenuItem::NONE)
@@ -68,4 +77,7 @@ class HomeActivity final : public Activity {
   void loop() override;
   void render(RenderLock&&) override;
   bool isHomeActivity() const override { return true; }
+  // PaperRead spec S-1.9: Home is the fourth, landing tab of the persistent
+  // bottom bar, so the shared tab-bar chrome (and its tap routing) applies.
+  MainTab mainTab() const override { return MainTab::Home; }
 };

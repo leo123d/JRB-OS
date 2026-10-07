@@ -8,7 +8,7 @@
 #include "components/Rect.h"
 #include "components/UiHighDpiProfile.h"
 
-enum class MainTab : uint8_t { None, Recent, Library, Settings };
+enum class MainTab : uint8_t { None, Home, Recent, Library, Settings };
 enum class MainTabFocus : uint8_t { Tabs, Content };
 enum class MainTabContentEdge : uint8_t { First, Last };
 
@@ -22,7 +22,10 @@ namespace MainTabs {
 inline constexpr int controlGap = UiHighDpiProfile::enabled ? UiHighDpiProfile::controlGap : 6;
 inline constexpr int statusBarHeight = UiHighDpiProfile::enabled ? UiHighDpiProfile::statusHeight : 28;
 inline constexpr int bottomBarHeight = UiHighDpiProfile::enabled ? UiHighDpiProfile::navigationHeight : 56;
-inline constexpr std::array<MainTab, 3> values = {MainTab::Recent, MainTab::Library, MainTab::Settings};
+// PaperRead UI spec S-1.9 (revises DESIGN decision 2): the bottom tab bar is
+// the single persistent navigation and carries four tabs. Home is the landing
+// tab; every other tab's Back target is Home.
+inline constexpr std::array<MainTab, 4> values = {MainTab::Home, MainTab::Recent, MainTab::Library, MainTab::Settings};
 
 constexpr int indexOf(const MainTab tab) {
   const auto found = std::find(values.begin(), values.end(), tab);
@@ -42,8 +45,10 @@ struct TabBounds {
 };
 
 constexpr TabBounds tabBounds(const int index, const int width) {
+  // Spec S-1.9: the four cells tile the bar edge to edge. Selection inverts the
+  // whole cell, so there is no inter-cell gutter and no dead hit region.
   const int count = static_cast<int>(values.size());
-  return {width * index / count + controlGap / 2, width * (index + 1) / count - controlGap / 2};
+  return {width * index / count, width * (index + 1) / count};
 }
 
 constexpr MainTab fromX(const int x, const int width) {
@@ -55,7 +60,7 @@ constexpr MainTab fromX(const int x, const int width) {
   return MainTab::None;
 }
 
-constexpr MainTab backTarget(const MainTab tab) { return tab == MainTab::Recent ? MainTab::None : MainTab::Recent; }
+constexpr MainTab backTarget(const MainTab tab) { return tab == MainTab::Home ? MainTab::None : MainTab::Home; }
 
 constexpr bool showsStatusBar(const bool usesMainTabs, const bool hasTouch, const bool tabsAtBottom) {
   return usesMainTabs && hasTouch && tabsAtBottom;

@@ -44,16 +44,23 @@ constexpr bool isSolid(const InxAppIcons::Icon& icon, const uint8_t value) {
 }
 }  // namespace
 
-TEST(InxNavigation, WrapsAcrossThreeTabs) {
-  EXPECT_EQ(MainTabs::adjacent(MainTab::Recent, -1), MainTab::Settings);
-  EXPECT_EQ(MainTabs::adjacent(MainTab::Settings, 1), MainTab::Recent);
+TEST(InxNavigation, WrapsAcrossFourTabs) {
+  // PaperRead spec S-1.9: 首页 / 最近阅读 / 书库 / 设置.
+  EXPECT_EQ(MainTabs::values.size(), 4u);
+  EXPECT_EQ(MainTabs::values[0], MainTab::Home);
+  EXPECT_EQ(MainTabs::values[3], MainTab::Settings);
+  EXPECT_EQ(MainTabs::adjacent(MainTab::Home, -1), MainTab::Settings);
+  EXPECT_EQ(MainTabs::adjacent(MainTab::Settings, 1), MainTab::Home);
+  EXPECT_EQ(MainTabs::adjacent(MainTab::Home, 1), MainTab::Recent);
+  EXPECT_EQ(MainTabs::adjacent(MainTab::Recent, -1), MainTab::Home);
   EXPECT_EQ(MainTabs::adjacent(MainTab::Library, 1), MainTab::Settings);
-  EXPECT_EQ(MainTabs::fromX(50, 500), MainTab::Recent);
-  EXPECT_EQ(MainTabs::fromX(200, 500), MainTab::Library);
-  EXPECT_EQ(MainTabs::fromX(400, 500), MainTab::Settings);
-  EXPECT_EQ(MainTabs::fromX(500, 500), MainTab::None);
-  EXPECT_EQ(MainTabs::backTarget(MainTab::Library), MainTab::Recent);
-  EXPECT_EQ(MainTabs::backTarget(MainTab::Recent), MainTab::None);
+  // Every tab's Back target is Home (the landing tab); Home itself has none.
+  EXPECT_EQ(MainTabs::backTarget(MainTab::Library), MainTab::Home);
+  EXPECT_EQ(MainTabs::backTarget(MainTab::Settings), MainTab::Home);
+  EXPECT_EQ(MainTabs::backTarget(MainTab::Recent), MainTab::Home);
+  EXPECT_EQ(MainTabs::backTarget(MainTab::Home), MainTab::None);
+  EXPECT_EQ(MainTabs::indexOf(MainTab::Home), 0);
+  EXPECT_EQ(MainTabs::indexOf(MainTab::Settings), 3);
   EXPECT_EQ(MainTabs::contentEdgeIndex(MainTabContentEdge::First, 0), 0);
   EXPECT_EQ(MainTabs::contentEdgeIndex(MainTabContentEdge::First, 10), 0);
   EXPECT_EQ(MainTabs::contentEdgeIndex(MainTabContentEdge::Last, 1), 0);
@@ -83,16 +90,17 @@ TEST(InxNavigation, PlacesTabsWithoutOverlappingContent) {
 }
 
 TEST(InxNavigation, SharesTabDrawingAndHitBoundsIncludingGaps) {
-  for (const int width : {480, 552, 768, 800, 527}) {
+  // Spec S-1.9: four equal-width cells that tile the bar edge to edge (no gaps;
+  // selection paints the whole cell), so a tap anywhere resolves to a tab.
+  for (const int width : {480, 552, 684, 768, 800, 527}) {
     for (size_t i = 0; i < MainTabs::values.size(); ++i) {
       const auto bounds = MainTabs::tabBounds(static_cast<int>(i), width);
       EXPECT_EQ(MainTabs::fromX(bounds.left, width), MainTabs::values[i]);
       EXPECT_EQ(MainTabs::fromX(bounds.right - 1, width), MainTabs::values[i]);
-      EXPECT_EQ(MainTabs::fromX(bounds.left - 1, width), MainTab::None);
-      EXPECT_EQ(MainTabs::fromX(bounds.right, width), MainTab::None);
-      if (i > 0) {
-        EXPECT_GE(bounds.left - MainTabs::tabBounds(static_cast<int>(i) - 1, width).right, 6);
-      }
+    }
+    // Every pixel of the bar maps to a tab (no dead gutters in the 4-tab bar).
+    for (int x = 0; x < width; ++x) {
+      EXPECT_NE(MainTabs::fromX(x, width), MainTab::None);
     }
   }
 }

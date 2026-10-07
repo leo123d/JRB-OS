@@ -24,7 +24,6 @@
 
 namespace {
 constexpr int kIconSize = UiHighDpiProfile::enabled ? UiHighDpiProfile::navigationIconSize : 38;
-constexpr int kUnderlineHeight = 5;
 constexpr int kRowHeight = InxMenuGeometry::rowHeight;
 constexpr int kRowPadding = UiHighDpiProfile::enabled ? UiHighDpiProfile::contentPadding : 20;
 constexpr int kListIconSize = 24;
@@ -53,23 +52,45 @@ const char* hintLabel(const char* label) {
   return label;
 }
 
+const char* tabLabel(const MainTab tab) {
+  switch (tab) {
+    case MainTab::Home:
+      return tr(STR_TAB_HOME);
+    case MainTab::Recent:
+      return tr(STR_TAB_RECENT);
+    case MainTab::Library:
+      return tr(STR_LIBRARY);
+    case MainTab::Settings:
+      return tr(STR_SETTINGS_TITLE);
+    case MainTab::None:
+      return nullptr;
+  }
+  return nullptr;
+}
+
 const uint8_t* iconForTab(const MainTab tab) {
   switch (tab) {
+    case MainTab::Home:
+#ifdef CROSSMUX_UI_PROFILE_HIGH_DPI
+      return icon_home_56.bits;
+#else
+      return InxHomeTabIcon;
+#endif
     case MainTab::Recent:
 #ifdef CROSSMUX_UI_PROFILE_HIGH_DPI
-      return icon_tab_recent_56.bits;
+      return icon_recent_56.bits;
 #else
       return InxRecentTabIcon;
 #endif
     case MainTab::Library:
 #ifdef CROSSMUX_UI_PROFILE_HIGH_DPI
-      return icon_tab_library_56.bits;
+      return icon_library_56.bits;
 #else
       return InxLibraryTabIcon;
 #endif
     case MainTab::Settings:
 #ifdef CROSSMUX_UI_PROFILE_HIGH_DPI
-      return icon_tab_settings_56.bits;
+      return icon_settings_56.bits;
 #else
       return InxSettingsTabIcon;
 #endif
@@ -77,16 +98,6 @@ const uint8_t* iconForTab(const MainTab tab) {
       return nullptr;
   }
   return nullptr;
-}
-
-void drawInxIcon(const GfxRenderer& renderer, const uint8_t* icon, const int x, const int y) {
-  constexpr int rowBytes = (kIconSize + 7) / 8;
-  for (int row = 0; row < kIconSize; ++row) {
-    for (int column = 0; column < kIconSize; ++column) {
-      const uint8_t byte = icon[row * rowBytes + column / 8];
-      if (((byte >> (7 - column % 8)) & 1U) == 0) renderer.drawPixel(x + column, y + row, true);
-    }
-  }
 }
 
 void drawDottedSeparator(const GfxRenderer& renderer, const int x, const int y, const int width) {
@@ -426,27 +437,50 @@ void InxTheme::drawOptionPopup(const GfxRenderer& renderer, const char* title, c
 }
 
 void InxTheme::drawMainTabBar(const GfxRenderer& renderer, const Rect rect, const MainTab selected) const {
+  if (rect.width <= 0 || rect.height <= 0) return;
+
+  // PaperRead spec S-1.9 "S-1.9 底部 Tab 栏":
+  //   bar: 4 equal cells, 1px --ink top border, icon 30x30 over label, gap 5px
+  //   selected: the whole cell inverts -- background --ink, icon + label white
+  //   unselected: paper with ink glyphs
   renderer.fillRect(rect.x, rect.y, rect.width, rect.height, false);
-  constexpr int bottomIconInset = UiHighDpiProfile::enabled ? 18 : 6;
-  const bool tabsAtBottom = SETTINGS.inxTabPosition == CrossPointSettings::INX_TAB_BOTTOM;
-  const int iconY =
-      rect.y + std::max(0, tabsAtBottom ? rect.height - kIconSize - bottomIconInset : (rect.height - kIconSize) / 2);
-  const int indicatorY = tabsAtBottom ? rect.y : rect.y + rect.height - kUnderlineHeight;
+  renderer.drawLine(rect.x, rect.y, rect.x + rect.width - 1, rect.y, true);
 
-  for (size_t i = 0; i < MainTabs::values.size(); ++i) {
-    const MainTab tab = MainTabs::values[i];
-    const auto bounds = MainTabs::tabBounds(static_cast<int>(i), rect.width);
-    const int left = rect.x + bounds.left;
-    const int right = rect.x + bounds.right;
-    const int iconX = left + (right - left - kIconSize) / 2;
-    if (const uint8_t* icon = iconForTab(tab)) drawInxIcon(renderer, icon, iconX, iconY);
-    if (tab == selected) {
-      renderer.fillRect(iconX, indicatorY, kIconSize, kUnderlineHeight);
+  const int count = static_cast<int>(MainTabs::values.size());
+  const int cellWidth = rect.width / count;
+  const int labelFont = UiHighDpiProfile::enabled ? UI_12_FONT_ID : SMALL_FONT_ID;
+  // Spec S-1.9: 30x30 glyph on ~300 PPI panels; the high-DPI preset ships the
+  // same vector at 56 px.
+  constexpr int kStdTabIconSize = 30;
+  const int iconSize = UiHighDpiProfile::enabled ? kIconSize : kStdTabIconSize;
+  constexpr int kTabStackGap = 5;
+  const int stackHeight = iconSize + kTabStackGap + renderer.getLineHeight(labelFont);
+  const int stackTop = rect.y + 1 + std::max(0, (rect.height - 1 - stackHeight) / 2);
+
+  for (int index = 0; index < count; ++index) {
+    const MainTab tab = MainTabs::values[index];
+    const int left = rect.x + index * cellWidth;
+    const int right = index + 1 == count ? rect.x + rect.width : rect.x + (index + 1) * cellWidth;
+    const bool active = tab == selected;
+    if (active) renderer.fillRect(left, rect.y + 1, right - left, rect.height - 1, true);
+
+    const uint8_t* icon = iconForTab(tab);
+    if (icon) {
+      const int iconX = left + (right - left - iconSize) / 2;
+      if (active)
+        renderer.drawIconInverted(icon, iconX, stackTop, iconSize);
+      else
+        renderer.drawIcon(icon, iconX, stackTop, iconSize);
     }
-  }
 
-  if (!tabsAtBottom) {
-    renderer.drawLine(rect.x, rect.y + rect.height - 1, rect.x + rect.width - 1, rect.y + rect.height - 1, true);
+    const char* label = tabLabel(tab);
+    if (label && *label) {
+      const int labelY = stackTop + iconSize + kTabStackGap;
+      const int textWidth = renderer.getTextWidth(labelFont, label);
+      const int textX = left + std::max(0, (right - left - textWidth) / 2);
+      const GfxRenderer::ClipScope clip(renderer, left, rect.y + 1, right - left, rect.height - 1);
+      renderer.drawText(labelFont, textX, labelY, label, !active);
+    }
   }
 }
 

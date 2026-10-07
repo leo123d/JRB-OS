@@ -273,9 +273,13 @@ void ActivityManager::resetHomeStandbyInput() {
 }
 
 bool ActivityManager::handleHomeStandbyInput() {
+  // The bottom tab bar Home is now a real tab (MainTab::Home), so standby is
+  // reachable from the Home tab's Back binding as well as the Recent tab's.
   const bool eligible =
       currentActivity && (currentActivity->isHomeActivity() ||
-                          (currentActivity->usesMainTabBar() && currentActivity->mainTab() == MainTab::Recent &&
+                          (currentActivity->usesMainTabBar() &&
+                           (currentActivity->mainTab() == MainTab::Home ||
+                            currentActivity->mainTab() == MainTab::Recent) &&
                            mainTabFocus == MainTabFocus::Tabs));
   if (!eligible || !SETTINGS.standbyShortcutEnabled) {
     resetHomeStandbyInput();
@@ -318,6 +322,8 @@ bool ActivityManager::handleMainTabInput() {
 
   const MainTab currentTab = currentActivity->mainTab();
   const Rect tabBar = currentActivity->mainTabLayout().tabBar;
+  // The bar draws a 1px top border on its first row (spec S-1.9); a tap on that
+  // line belongs to the tab it sits above.
   const auto insideTabs = [&tabBar](const int x, const int y) {
     return x >= tabBar.x && x < tabBar.x + tabBar.width && y >= tabBar.y && y < tabBar.y + tabBar.height;
   };
@@ -325,7 +331,7 @@ bool ActivityManager::handleMainTabInput() {
   int x = 0;
   int y = 0;
   if (mappedInput.wasScreenTapped(x, y)) {
-    if (insideTabs(x, y)) {
+    if (insideTabs(x, y) || y == tabBar.y) {
       const MainTab target = MainTabs::fromX(x - tabBar.x, tabBar.width);
       if (target != MainTab::None) {
         mainTabFocus = MainTabFocus::Content;
@@ -454,6 +460,9 @@ void ActivityManager::goToInxRecent() { replaceActivityWith<InxRecentActivity>()
 void ActivityManager::goToMainTab(const MainTab tab) {
   mainTabEntryReleasePending = false;
   switch (tab) {
+    case MainTab::Home:
+      goHome(HomeMenuItem::LIBRARY);
+      return;
     case MainTab::Recent:
       goToInxRecent();
       return;
