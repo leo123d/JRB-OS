@@ -4,6 +4,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <iterator>
 #include <vector>
 
 // Reader font size is stored as an actual point size (see CrossPointSettings::
@@ -14,6 +15,25 @@
 // The unified firmware keeps one offline reader fallback. Other point sizes and
 // style variants are supplied by installed SD-card font families.
 inline constexpr uint8_t BUILTIN_READER_POINT_SIZES[] = {12};
+
+#if FREEINK_DEVICE_READPICO
+// JRB OS embeds MiSans for the two sizes that matter offline: 12pt (the
+// upstream fallback) and 20pt (the paperread UI spec's default body size).
+// 14/16/18pt still come from SD .cpfont files when installed.
+inline constexpr uint8_t READPICO_BUILTIN_READER_POINT_SIZES[] = {12, 20};
+#endif
+
+// The built-in reader point sizes for this build. Single source of truth so the
+// five call sites (settings snap, SD-family snap, size list) cannot drift.
+inline const uint8_t* builtinReaderPointSizes(size_t& count) {
+#if FREEINK_DEVICE_READPICO
+  count = std::size(READPICO_BUILTIN_READER_POINT_SIZES);
+  return READPICO_BUILTIN_READER_POINT_SIZES;
+#else
+  count = std::size(BUILTIN_READER_POINT_SIZES);
+  return BUILTIN_READER_POINT_SIZES;
+#endif
+}
 
 // Vector (.ttf/.otf) fonts offer every whole point size from 8 through 22.
 inline constexpr uint8_t VECTOR_READER_POINT_SIZES[] = {8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22};

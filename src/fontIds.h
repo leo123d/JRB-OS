@@ -15,6 +15,16 @@
 #define CHINESE_CHESS_FONT_ID (1005290636)
 #define CONTROL_18_FONT_ID (29318789)
 
+// JRB OS reader fonts embedded in the application image (MiSans, GB2312
+// Lv1+Lv2 full coverage, DEFLATE-compressed 2-bit bitmaps). These close the
+// gap left by BUILTIN_READER_POINT_SIZES == {12} in the upstream build: the
+// reader no longer needs an SD-card .cpfont for the 20pt default size.
+// IDs are SHA256-derived exactly like build-font-ids.sh (Ruby text-mode read
+// normalises CRLF to LF before hashing), so regenerating the headers with an
+// unchanged pipeline keeps them stable.
+#define MISANS_12_FONT_ID (543479311)
+#define MISANS_20_FONT_ID (1489431786)
+
 // Font ID 0 is reserved as the "not found" sentinel.
 // Guard against any hash accidentally producing 0.
 static_assert(NOTOSERIF_12_FONT_ID != 0, "Font ID collision with sentinel");
@@ -30,3 +40,5 @@ static_assert(UI_12_FONT_ID != 0, "Font ID collision with sentinel");
 static_assert(SMALL_FONT_ID != 0, "Font ID collision with sentinel");
 static_assert(CHINESE_CHESS_FONT_ID != 0, "Font ID collision with sentinel");
 static_assert(CONTROL_18_FONT_ID != 0, "Font ID collision with sentinel");
+static_assert(MISANS_12_FONT_ID != 0, "Font ID collision with sentinel");
+static_assert(MISANS_20_FONT_ID != 0, "Font ID collision with sentinel");

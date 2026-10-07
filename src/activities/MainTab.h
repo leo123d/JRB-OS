@@ -63,7 +63,18 @@ constexpr MainTab fromX(const int x, const int width) {
 constexpr MainTab backTarget(const MainTab tab) { return tab == MainTab::Home ? MainTab::None : MainTab::Home; }
 
 constexpr bool showsStatusBar(const bool usesMainTabs, const bool hasTouch, const bool tabsAtBottom) {
+#if FREEINK_DEVICE_READPICO
+  // PaperRead S-1.1 owns its own masthead (battery only) and the project
+  // dropped clock/date entirely, so the generic status bar must not draw a
+  // second battery + a clock on top of the masthead. Suppressing it here also
+  // releases the reserved 48 px band on every other tab.
+  (void)usesMainTabs;
+  (void)hasTouch;
+  (void)tabsAtBottom;
+  return false;
+#else
   return usesMainTabs && hasTouch && tabsAtBottom;
+#endif
 }
 
 constexpr MainTabLayout layout(const Rect& safeArea, const int topPadding, const int tabHeight, const bool tabsAtBottom,

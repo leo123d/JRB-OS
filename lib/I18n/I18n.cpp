@@ -3,6 +3,10 @@
 #include <cstddef>
 #include <cstring>
 
+// Relative include: the I18n lib does not declare Logging as a dependency, so
+// <Logging.h> is not on this translation unit's include path.
+#include "../Logging/Logging.h"
+
 #include "I18nStrings.h"
 
 using namespace i18n_strings;
@@ -15,6 +19,13 @@ I18n& I18n::getInstance() {
 const char* I18n::get(StrId id) const {
   const auto index = static_cast<size_t>(id);
   if (index >= static_cast<size_t>(StrId::_COUNT)) {
+    // Should never fire: every translation unit bakes the StrId ordinals from
+    // the same generated I18nKeys.h. If it does, some object file was built
+    // against a stale I18nKeys.h (the enum grew or shrank since) and every
+    // tr(STR_*) in it resolves to "???" on screen. Log it so the drift is
+    // visible on the serial console instead of only as tofu.
+    LOG_ERR("I18N", "StrId %u out of range (count=%u) -> \"???\"", static_cast<unsigned>(index),
+            static_cast<unsigned>(StrId::_COUNT));
     return "???";
   }
 

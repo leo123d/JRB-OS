@@ -274,6 +274,12 @@ class SettingsActivity final : public UiTabListActivity {
   void drawChrome() override;
   void drawFooter() override;
 
+#if FREEINK_DEVICE_READPICO
+  // PaperRead spec S-4: fixed four-section read-only settings page. Returns
+  // true when it owns the frame (caller skips the fui::list shelf).
+  bool renderPaperReadSettings();
+#endif
+
  public:
   explicit SettingsActivity(GfxRenderer& renderer, MappedInputManager& mappedInput);
   void onEnter() override;

@@ -876,18 +876,17 @@ void HomeActivity::renderPaperReadHome() {
   (void)bottom;
   (void)left;
 
-  // -- S-1.1 masthead: 「小纸」21px + 「· 纯阅读」15px gray + battery, 1px gray rule
-  // px->pt is /(4/3): 21px ~ 16pt, 15px ~ 12pt (spec R-8).
-  const int brandFont = NOTOSERIF_16_FONT_ID;
-  const int brandSubFont = NOTOSERIF_12_FONT_ID;
-  const int brandBaseline = kMastheadTop + 20;
-  renderer.drawText(brandFont, kSideMargin, brandBaseline, "小纸", true);
-  const int brandWidth = renderer.getTextWidth(brandFont, "小纸");
-  renderer.drawText(brandSubFont, kSideMargin + brandWidth + 8, brandBaseline + 5, "· 纯阅读");
+  // -- S-1.1 masthead: battery only + 1px gray rule.
+  // The 「小纸 · 纯阅读」 wordmark is gone (it collided with the clock the old
+  // status bar drew), and so is the clock itself -- the project dropped
+  // clock/date, and MainTabs::showsStatusBar now suppresses the generic status
+  // bar on readpico so no second battery is painted over this band.
+  const int batteryH = InxMetrics::values.batteryHeight;
+  const int batteryY = kMastheadTop + (kMastheadHeight > batteryH ? (kMastheadHeight - batteryH) / 2 : 0);
   GUI.drawBatteryRight(
       renderer,
-      Rect{pageWidth - kSideMargin - InxMetrics::values.batteryWidth, brandBaseline,
-           InxMetrics::values.batteryWidth, InxMetrics::values.batteryHeight},
+      Rect{pageWidth - kSideMargin - InxMetrics::values.batteryWidth, batteryY,
+           InxMetrics::values.batteryWidth, batteryH},
       SETTINGS.hideBatteryPercentage != CrossPointSettings::HIDE_BATTERY_PERCENTAGE::HIDE_ALWAYS);
   renderer.drawLine(kSideMargin, kMastheadTop + kMastheadHeight, pageWidth - kSideMargin - 1,
                     kMastheadTop + kMastheadHeight, false);
@@ -901,7 +900,7 @@ void HomeActivity::renderPaperReadHome() {
   const char* heroChapter = heroStats && !heroStats->chapterTitle.empty() ? heroStats->chapterTitle.c_str() : nullptr;
 
   const Rect heroCover{kSideMargin, kHeroTop, kHeroCoverWidth, kHeroCoverHeight};
-  if (hero) drawPaperReadCover(*hero, heroCover, 20);
+  if (hero) drawPaperReadCover(*hero, heroCover, MISANS_20_FONT_ID, 20);
 
   const int textX = kSideMargin + kHeroCoverWidth + kHeroGap;
   const int textWidth = pageWidth - kSideMargin - textX;
@@ -956,7 +955,7 @@ void HomeActivity::renderPaperReadHome() {
       const RecentBook& book = recentBooks[i];
       const int cardX = kSideMargin + i * (kCardCoverWidth + gap);
       const Rect cover{cardX, kCardRowY, kCardCoverWidth, kCardCoverHeight};
-      drawPaperReadCover(book, cover, 16);
+      drawPaperReadCover(book, cover, MISANS_12_FONT_ID, 16);
       cardRects.push_back(cover);
       const ReadingBookStats* stats = READING_STATS.findMatchingBookForPath(book.path, book.title, book.author);
       const std::string cardTitle =
@@ -1012,7 +1011,7 @@ int HomeActivity::paperreadDots(const GfxRenderer& r, const int x, const int y, 
   return count * (kDot + kGap) - kGap;
 }
 
-void HomeActivity::drawPaperReadCover(const RecentBook& book, const Rect& rect, int fontSize) {
+void HomeActivity::drawPaperReadCover(const RecentBook& book, const Rect& rect, int fontId, int fontPt) {
   // Deterministic generated cover (spec §4): 1px frame, 1px inner liner inset
   // 5px, dither base, vertical title, publisher line. A real thumbnail, when
   // present and cached, is drawn crop-filled instead.
@@ -1036,11 +1035,19 @@ void HomeActivity::drawPaperReadCover(const RecentBook& book, const Rect& rect, 
   renderer.fillRectDither(rect.x + 1, rect.y + 1, rect.width - 2, rect.height - 2, Color::LightGray);
   renderer.drawRect(rect.x, rect.y, rect.width, rect.height, true);
   renderer.drawRect(rect.x + 5, rect.y + 5, rect.width - 10, rect.height - 10, true);
-  // Vertical title, centered.
+  // Vertical title, centered. The run advances upward (drawTextRotated90CW
+  // does lastBaseY -= advance), so it is centred by starting at mid + half the
+  // run. The run must also fit the cover's inner liner: a long title such as
+  // "CrossMux用户手册" otherwise starts below the bottom edge and pokes out the
+  // top, so truncate to the liner height before measuring. fontId is the face
+  // to draw with; fontPt is only the nominal size for the cross-axis inset.
   const std::string title = book.title.empty() ? book.path : book.title;
-  renderer.drawTextRotated90CW(fontSize, rect.x + rect.width / 2 + fontSize / 2, rect.y + rect.height / 2 +
-                                                                                    (int)title.size() * fontSize / 2,
-                               title.c_str());
+  constexpr int kSpineInset = 12;  // 5 px liner + breathing room at each end
+  const int maxSpineRun = std::max(8, rect.height - kSpineInset * 2);
+  const std::string spine = renderer.truncatedText(fontId, title.c_str(), maxSpineRun);
+  const int spineRun = renderer.getTextWidth(fontId, spine.c_str());
+  renderer.drawTextRotated90CW(fontId, rect.x + rect.width / 2 + fontPt / 2,
+                               rect.y + rect.height / 2 + spineRun / 2, spine.c_str());
 }
 #endif  // FREEINK_DEVICE_READPICO
 

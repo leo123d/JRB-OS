@@ -59,6 +59,9 @@
 
 #endif
 #include "components/UITheme.h"
+#if FREEINK_DEVICE_READPICO
+#include "components/themes/paperread/PaperReadReaderOverlay.h"
+#endif
 #include "fontIds.h"
 #include "util/AchievementPopupUtils.h"
 #include "util/BookmarkUtil.h"
@@ -484,7 +487,22 @@ void EpubReaderActivity::openReaderMenu() {
 }
 
 ReaderRenderSpec EpubReaderActivity::effectiveRenderSpec(const uint16_t width, const uint16_t height) const {
+#if FREEINK_DEVICE_READPICO
+  // PaperRead spec §7 needs the face's advanceY/fontSize ratio to reproduce the
+  // calibrated line height for whichever face is loaded. The reader font id is
+  // resolved the same way readerRenderSpec will resolve it.
+  float advanceRatio = 0.0f;
+  const int fontId = SETTINGS.getReaderFontId();
+  const int advanceY = renderer.getLineHeight(fontId);
+  const int pointSize = SETTINGS.fontPointSize;
+  if (advanceY > 0 && pointSize > 0) {
+    const float fs = static_cast<float>(pointSize) * 4.0f / 3.0f;
+    if (fs > 0.0f) advanceRatio = static_cast<float>(advanceY) / fs;
+  }
+  auto spec = SETTINGS.readerRenderSpec(width, height, advanceRatio);
+#else
   auto spec = SETTINGS.readerRenderSpec(width, height);
+#endif
   spec.collectTouchLinks = mappedInput.hasTouch();
   if (stylesDisabledForSession_) spec.embeddedStyle = false;
   return spec;
@@ -2945,6 +2963,56 @@ void EpubReaderActivity::closeOverlayToPage() {
 void EpubReaderActivity::renderOverlay() {
   if (!epub || !section || !toolbarUi) return;
 
+#if FREEINK_DEVICE_READPICO
+  // PaperRead spec O-1..O-5: draw the spec geometry instead of the legacy
+  // ReaderToolbarUi. The reading page itself (S-5) is untouched.
+  {
+    paperread_overlay::OverlayModel model;
+    switch (overlay) {
+      case Overlay::Toolbar:
+        model.panel = paperread_overlay::Panel::Toolbar;
+        break;
+      case Overlay::Contents:
+        model.panel = paperread_overlay::Panel::Contents;
+        break;
+      case Overlay::Text:
+        model.panel = paperread_overlay::Panel::Text;
+        break;
+      case Overlay::More:
+        model.panel = paperread_overlay::Panel::Marks;
+        break;
+      case Overlay::None:
+        return;
+    }
+    // Shared header/model fields.
+    static std::string sBookTitle, sChapterTitle, sPageInfo;
+    sBookTitle = epub->getTitle();
+    sChapterTitle = currentChapterTitle();
+    const int pageCount = section->estimatedTotalPages();
+    sPageInfo = std::to_string(section->currentPage + 1) + " / " + std::to_string(pageCount);
+    model.bookTitle = sBookTitle.c_str();
+    model.chapterTitle = sChapterTitle.c_str();
+    model.pageInfo = sPageInfo.c_str();
+    model.pageNumber = section->currentPage + 1;
+    model.pageCount = pageCount;
+    const float chapterProgress =
+        pageCount > 0 ? static_cast<float>(section->currentPage + 1) / static_cast<float>(pageCount) : 0.0f;
+    const float bookProgress = epub->calculateProgress(currentSpineIndex, chapterProgress);
+    model.percent = clampPercent(static_cast<int>(bookProgress * 100.0f + 0.5f));
+    model.chapterLabel = sChapterTitle.c_str();
+    model.tocCount = epub->getTocItemsCount();
+    model.tocSelected = currentTocIndex();
+    // Text-control selections pulled back from SETTINGS.
+    model.sizePt = SETTINGS.fontPointSize;
+    model.spacingIndex = SETTINGS.lineSpacing <= 2 ? SETTINGS.lineSpacing : 1;
+    model.marginIndex = SETTINGS.screenMargin <= 20 ? 0 : (SETTINGS.screenMargin <= 40 ? 1 : 2);
+    model.alignIndex = SETTINGS.paragraphAlignment <= 2 ? SETTINGS.paragraphAlignment : 0;
+    model.fontIndex = 0;
+    paperread_overlay::render(renderer, model);
+    return;
+  }
+#endif
+
   ReaderToolbarUi::Model model;
   // The toolbar's tool pill is the button-navigation cursor: tap-first (same
   // convention as the panel lists), it only shows once a button has moved it.
@@ -3061,7 +3129,16 @@ void EpubReaderActivity::handleOverlayInput() {
     requestUpdate();
   };
   const auto toolOverlay = [](int tool) {
+#if FREEINK_DEVICE_READPICO
+    // PaperRead spec O-1 shows 目录 / 进度 / 标记 / 字体. The legacy overlay enum
+    // only has Toolbar/Contents/Text/More, so 目录->Contents and 字体->Text are
+    // direct; 进度 and 标记 both land on More, whose render is overridden per
+    // index (see renderOverlay). A dedicated Progress panel needs a new enum
+    // slot, which is deferred to avoid destabilising the reader input switch.
+    return tool == 0 ? Overlay::Contents : (tool == 1 ? Overlay::More : (tool == 2 ? Overlay::More : Overlay::Text));
+#else
     return tool == 0 ? Overlay::Contents : (tool == 1 ? Overlay::Text : Overlay::More);
+#endif
   };
 
   // Touch first: FreeInkUI routes the frame against the tap targets the last

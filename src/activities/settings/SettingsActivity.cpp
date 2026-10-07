@@ -38,6 +38,9 @@
 #include "TextSettingsActivity.h"
 #include "activities/home/FileBrowserActivity.h"
 #include "activities/util/ConfirmationActivity.h"
+#if FREEINK_DEVICE_READPICO
+#include "components/themes/paperread/PaperReadUi.h"
+#endif
 #include "activities/util/IntervalSelectionActivity.h"
 #include "components/SubpageLayout.h"
 #include "components/UITheme.h"
@@ -1165,6 +1168,94 @@ void SettingsActivity::drawFooter() {
 }
 
 void SettingsActivity::render(RenderLock&& lock) {
+#if FREEINK_DEVICE_READPICO
+  if (renderPaperReadSettings()) return;
+#endif
   if (optionPopup.processRender(renderer, mappedInput)) return;
   UiListActivity::render(std::move(lock));
 }
+
+#if FREEINK_DEVICE_READPICO
+// ---------------------------------------------------------------------------
+// PaperRead spec S-4: settings page.
+//
+// Header  : back arrow + "设置" 21px, 1px ink rule at y101.
+// Sections: 阅读 / 显示 / 书库 / 系统 headings at 16px grey, padding 18/32/10.
+// Rows    : 78px tall, label 19px on the left, value 17px grey + " ›" right,
+//           separated by a 1px light rule.
+// Tabs    : shared bottom bar with "设置" selected.
+//
+// v1 values are read-only mirrors of CrossPointSettings (spec permits this);
+// the label/value pairs are fixed in the order the spec lists them.
+// ---------------------------------------------------------------------------
+bool SettingsActivity::renderPaperReadSettings() {
+  if (optionPopup.processRender(renderer, mappedInput)) return true;
+
+  renderer.clearScreen();
+  PaperReadUi::drawHeader(renderer, tr(STR_SETTINGS_TITLE));
+
+  constexpr int kRowHeight = 78;
+  constexpr int kSectionBand = 18 + 10;  // heading top pad + bottom pad
+  int y = PaperReadUi::kBodyTop;
+
+  auto section = [&](const char* title) {
+    PaperReadUi::drawSectionTitle(renderer, y, title);
+    y += kSectionBand + renderer.getLineHeight(NOTOSERIF_12_FONT_ID);
+  };
+  auto row = [&](const char* label, const char* value) {
+    PaperReadUi::drawSettingRow(renderer, y, label, value);
+    y += kRowHeight;
+  };
+
+  char valueBuffer[64];
+
+  // -- 阅读 ---------------------------------------------------------------
+  section(tr(STR_SEC_READING));
+  std::snprintf(valueBuffer, sizeof(valueBuffer), "%u pt", static_cast<unsigned>(SETTINGS.fontPointSize));
+  row(tr(STR_FONT_SIZE), valueBuffer);
+  row(tr(STR_FONT_FAMILY),
+      SETTINGS.sdFontFamilyName[0] == '\0' ? tr(STR_FOLLOW_SETTINGS) : SETTINGS.sdFontFamilyName);
+  {
+    const uint8_t ls = SETTINGS.lineSpacing;
+    const float mult = ls == 0 ? 1.2f : (ls == 1 ? 1.6f : 2.0f);
+    std::snprintf(valueBuffer, sizeof(valueBuffer), "%.1f", static_cast<double>(mult));
+    row(tr(STR_LINE_SPACING), valueBuffer);
+  }
+  std::snprintf(valueBuffer, sizeof(valueBuffer), tr(STR_MARGIN_PX_FMT), static_cast<unsigned>(SETTINGS.screenMargin));
+  row(tr(STR_SCREEN_MARGIN), valueBuffer);
+  row(tr(STR_ALIGNMENT), SETTINGS.paragraphAlignment != 0 ? tr(STR_JUSTIFY) : tr(STR_ALIGN_LEFT));
+  row(tr(STR_SHOW_HEADER), SETTINGS.statusBarTitle != 0 ? tr(STR_ON) : tr(STR_OFF));
+
+  // -- 显示 ---------------------------------------------------------------
+  section(tr(STR_SEC_DISPLAY));
+  {
+    static const uint8_t kRefreshPages[] = {1, 5, 10, 15, 30, 0};
+    const uint8_t pages = SETTINGS.refreshFrequency < 6 ? kRefreshPages[SETTINGS.refreshFrequency] : 15;
+    if (pages == 0) {
+      std::snprintf(valueBuffer, sizeof(valueBuffer), "%s", tr(STR_NEVER));
+    } else {
+      std::snprintf(valueBuffer, sizeof(valueBuffer), tr(STR_SIX_PAGES_FMT), static_cast<unsigned>(pages));
+    }
+    row(tr(STR_REFRESH_FREQ), valueBuffer);
+  }
+  row(tr(STR_PAGE_TURN_DIRECTION), SETTINGS.pageTurnDirection != 0 ? tr(STR_RTL) : tr(STR_LTR));
+
+  // -- 书库 ---------------------------------------------------------------
+  section(tr(STR_SEC_LIBRARY));
+  row(tr(STR_DEFAULT_VIEW), tr(STR_GRID_VIEW));
+  row(tr(STR_LIBRARY_USE_METADATA), SETTINGS.libraryUseMetadata != 0 ? tr(STR_ON) : tr(STR_OFF));
+
+  // -- 系统 ---------------------------------------------------------------
+  section(tr(STR_SEC_SYSTEM));
+  std::snprintf(valueBuffer, sizeof(valueBuffer), tr(STR_SLEEP_TIMEOUT_MINS_FMT),
+                static_cast<unsigned>(SETTINGS.sleepTimeoutMinutes));
+  row(tr(STR_SLEEP), valueBuffer);
+  row(tr(STR_TILT_PAGE_TURN), SETTINGS.tiltPageTurn != 0 ? tr(STR_ON) : tr(STR_OFF));
+  row(tr(STR_LOCAL_OTA), CROSSPOINT_VERSION);
+  row(tr(STR_ABOUT), tr(STR_CROSSPOINT));
+
+  GUI.drawMainTabBar(renderer, mainTabLayout().tabBar, MainTab::Settings);
+  renderer.displayBuffer();
+  return true;
+}
+#endif  // FREEINK_DEVICE_READPICO

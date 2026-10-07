@@ -467,7 +467,11 @@ void ActivityManager::goToMainTab(const MainTab tab) {
       goToInxRecent();
       return;
     case MainTab::Library:
-      goToFileBrowser();
+      // PaperRead spec S-3: the Library tab is the book cover grid (filter
+      // chips + 3x2 covers), which is LibraryListActivity reading the CLX1
+      // index. The raw SD-card file browser stays reachable from the home
+      // screen's library action and from within the reader.
+      goToLibrary();
       return;
     case MainTab::Settings:
       goToSettings();
