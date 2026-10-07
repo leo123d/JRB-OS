@@ -19,7 +19,6 @@
 #include <cstring>
 
 #include "AboutActivity.h"
-#include "AppVisibilitySettingsActivity.h"
 #include "BluetoothSettingsActivity.h"
 #include "ButtonRemapActivity.h"
 #include "ClearCacheActivity.h"
@@ -802,7 +801,7 @@ void SettingsActivity::toggleCurrentSetting() {
         startActivityForResultWith<ReadingStatsSettingsActivity>(resultHandler);
         break;
       case SettingAction::AppVisibility:
-        startActivityForResultWith<AppVisibilitySettingsActivity>(resultHandler);
+        // PaperRead: app-visibility settings removed with the apps subsystem.
         break;
       case SettingAction::ClockSettings:
         if (auto activity = makeUniqueNoThrow<ClockSettingsActivity>(renderer, mappedInput)) {

@@ -456,9 +456,6 @@ void HomeActivity::loop() {
       case HomeMenuItem::SETTINGS_MENU:
         onSettingsOpen();
         break;
-      case HomeMenuItem::APPS:
-        onAppsOpen();
-        break;
       default:
         break;
     }
@@ -833,7 +830,5 @@ void HomeActivity::onSettingsOpen() { activityManager.goToSettings(); }
 void HomeActivity::onFileTransferOpen() { activityManager.goToFileTransfer(); }
 
 void HomeActivity::onOpdsBrowserOpen() { activityManager.goToBrowser(); }
-
-void HomeActivity::onAppsOpen() { activityManager.goToApps(); }
 
 void HomeActivity::onPluginsOpen() { activityManager.goToPlugins(hasOpdsServers); }

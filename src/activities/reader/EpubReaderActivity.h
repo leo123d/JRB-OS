@@ -97,7 +97,6 @@ class EpubReaderActivity final : public ReaderActivity {
 
 #ifdef ENABLE_CHINESE_VERSION
   std::atomic<uint32_t> pendingMissingChineseCodepoint_{0};
-  char wereadBookId_[64] = {};
   bool clearInitialProgressAfterSave_ = false;
   bool maybeOfferCompleteChineseFont();
 #endif
@@ -242,7 +241,6 @@ class EpubReaderActivity final : public ReaderActivity {
   void openDictionaryWordSelect();
   bool launchKOReaderSync();
 #ifdef ENABLE_CHINESE_VERSION
-  bool launchWeReadSync();
 #endif
   unsigned long confirmLongPressThreshold() const;
   void toggleAutoPageTurn(uint8_t requestedPageTurnRate);

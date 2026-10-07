@@ -118,9 +118,6 @@ class ActivityManager {
   void goToJoinNetwork();  // File Transfer straight into Join Network (post heap-defrag reboot)
   void goToUsbDrive();
   void goToSettings();
-  void goToUglyAvatar();
-  void goToReadingStatsMenu();
-  void goToReadingStats();
   void goToInxRecent();
   void goToMainTab(MainTab tab);
   void goToFileBrowser(std::string path = {});
@@ -134,23 +131,9 @@ class ActivityManager {
   bool goToPostOtaBoot(bool allowAutoPreload);
   void goToFullScreenMessage(std::string message, EpdFontFamily::Style style = EpdFontFamily::REGULAR);
   void goToCrashReport();
-  void goToApps();
-  void goToSudoku();
-  void goToSokoban();
-  void goToGomoku();
-  void goToMinesweeper();
-  void goToPixelSwitch();
-  void goToCalculator();
-  void goToWoodfish();
-  void goToAirPage();
-  void goToBuddy();
-  void goToStandby();
-  void goToGame2048();
 #ifdef ENABLE_CHINESE_VERSION
-  void goToChineseChess();
 #endif
 #ifdef ENABLE_CHINESE_VERSION
-  void goToWeRead();
 #endif
   void goHome(HomeMenuItem initialMenuItem = HomeMenuItem::NONE);
   MainTabFocus getMainTabFocus() const { return mainTabFocus; }
