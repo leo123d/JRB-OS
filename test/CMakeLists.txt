@@ -132,8 +132,8 @@ add_test(NAME ControlCenterGesture
   COMMAND ${Python3_EXECUTABLE} ${REPO_ROOT}/scripts/tests/test_control_center_gesture.py)
 add_test(NAME ReadingUiRegressions
   COMMAND ${Python3_EXECUTABLE} ${REPO_ROOT}/scripts/tests/test_reading_ui_regressions.py)
-add_test(NAME DownloadMemoryLifecycle
-  COMMAND ${Python3_EXECUTABLE} ${REPO_ROOT}/scripts/tests/test_download_memory_lifecycle.py)
+# DownloadMemoryLifecycle was removed with the network stack: it compiled the
+# deleted FontDownloadActivity / OtaUpdateActivity / PluginCatalogActivity.
 add_test(NAME WifiFontRecovery
   COMMAND ${Python3_EXECUTABLE} ${REPO_ROOT}/scripts/tests/test_wifi_font_recovery.py)
 add_test(NAME HalClockSntp
@@ -164,7 +164,8 @@ add_test(NAME VectorGrayFallback
 
 
 add_test(NAME UnifiedKeyboard COMMAND ${Python3_EXECUTABLE} ${REPO_ROOT}/test/inx_navigation/test_unified_keyboard.py)
-add_test(NAME TouchNetworkControls COMMAND ${Python3_EXECUTABLE} ${REPO_ROOT}/test/inx_navigation/test_touch_network.py)
+# TouchNetworkControls was removed with the network stack: its subject was
+# WifiSelectionActivity's touch footer.
 add_test(NAME ThemeMenus COMMAND ${Python3_EXECUTABLE} ${REPO_ROOT}/test/inx_navigation/test_theme_menus.py)
 
 add_test(NAME CoverGridCompatibility COMMAND ${Python3_EXECUTABLE} ${REPO_ROOT}/test/inx_navigation/test_cover_grid.py)
@@ -194,13 +195,11 @@ add_subdirectory(protected_paths)
 find_package(Python3 REQUIRED COMPONENTS Interpreter)
 add_test(NAME TrustedTimeTimezone COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/test_trusted_time.py)
 
-add_test(NAME WebServerStartupFailure COMMAND ${Python3_EXECUTABLE} ${REPO_ROOT}/scripts/tests/test_webserver_startup_failure.py)
-
-add_test(NAME WifiStartupFailure COMMAND ${Python3_EXECUTABLE} ${REPO_ROOT}/scripts/tests/test_wifi_startup_failure.py)
-
+# WebServerStartupFailure / WifiStartupFailure / TlsMemoryPreflight were removed
+# with the network stack (src/network/**, the WiFi + web-server activities and
+# the WeRead lib). FontPreloadFlow below is unrelated and stays.
 add_test(NAME FontPreloadFlow
   COMMAND ${Python3_EXECUTABLE} ${REPO_ROOT}/test/reader_font_preview/test_preload_flow.py)
-add_test(NAME TlsMemoryPreflight COMMAND ${Python3_EXECUTABLE} ${REPO_ROOT}/scripts/tests/test_tls_memory_preflight.py)
 add_test(NAME ImageBlockMemoryFailure COMMAND ${Python3_EXECUTABLE} ${REPO_ROOT}/scripts/tests/test_image_block_memory_failure.py)
 
 add_test(NAME FontPreloadRefresh COMMAND ${Python3_EXECUTABLE} ${REPO_ROOT}/scripts/tests/test_font_preload_refresh.py)
