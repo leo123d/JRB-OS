@@ -4,6 +4,13 @@
 
 运行在 **小纸 Read Pico**（MindReset RDP-G01-W，ESP32-S3-N16R8，4.7″ 684×1216 16 级灰度墨水屏）上。
 
+> 📖 **接手开发请先读 [`docs/jrbos/HANDOVER.md`](docs/jrbos/HANDOVER.md)** —— 交接文档，
+> 含构建环境关键补丁、已完成的实测数据、六条硬教训、下一步优先级。
+>
+> 其它项目文档：[字库策略](docs/jrbos/FONT-STRATEGY.md) ·
+> [构建踩坑](docs/jrbos/BUILD.md) · [刷写说明](docs/jrbos/FLASH.md) ·
+> [阶段1记录](docs/jrbos/PHASE1-LOG.md) · [设计文档](docs/jrbos/PAPERREAD-DESIGN.md)
+
 ---
 
 ## 这是什么
