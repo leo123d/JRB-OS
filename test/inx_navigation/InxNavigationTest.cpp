@@ -44,17 +44,15 @@ constexpr bool isSolid(const InxAppIcons::Icon& icon, const uint8_t value) {
 }
 }  // namespace
 
-TEST(InxNavigation, WrapsAcrossFiveTabs) {
-  EXPECT_EQ(MainTabs::adjacent(MainTab::Recent, -1), MainTab::Statistics);
-  EXPECT_EQ(MainTabs::adjacent(MainTab::Statistics, 1), MainTab::Recent);
-  EXPECT_EQ(MainTabs::adjacent(MainTab::Library, 1), MainTab::Apps);
+TEST(InxNavigation, WrapsAcrossThreeTabs) {
+  EXPECT_EQ(MainTabs::adjacent(MainTab::Recent, -1), MainTab::Settings);
+  EXPECT_EQ(MainTabs::adjacent(MainTab::Settings, 1), MainTab::Recent);
+  EXPECT_EQ(MainTabs::adjacent(MainTab::Library, 1), MainTab::Settings);
   EXPECT_EQ(MainTabs::fromX(50, 500), MainTab::Recent);
-  EXPECT_EQ(MainTabs::fromX(150, 500), MainTab::Library);
-  EXPECT_EQ(MainTabs::fromX(250, 500), MainTab::Apps);
-  EXPECT_EQ(MainTabs::fromX(350, 500), MainTab::Settings);
-  EXPECT_EQ(MainTabs::fromX(450, 500), MainTab::Statistics);
+  EXPECT_EQ(MainTabs::fromX(200, 500), MainTab::Library);
+  EXPECT_EQ(MainTabs::fromX(400, 500), MainTab::Settings);
   EXPECT_EQ(MainTabs::fromX(500, 500), MainTab::None);
-  EXPECT_EQ(MainTabs::backTarget(MainTab::Apps), MainTab::Recent);
+  EXPECT_EQ(MainTabs::backTarget(MainTab::Library), MainTab::Recent);
   EXPECT_EQ(MainTabs::backTarget(MainTab::Recent), MainTab::None);
   EXPECT_EQ(MainTabs::contentEdgeIndex(MainTabContentEdge::First, 0), 0);
   EXPECT_EQ(MainTabs::contentEdgeIndex(MainTabContentEdge::First, 10), 0);

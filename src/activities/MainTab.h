@@ -8,7 +8,7 @@
 #include "components/Rect.h"
 #include "components/UiHighDpiProfile.h"
 
-enum class MainTab : uint8_t { None, Recent, Library, Apps, Settings, Statistics };
+enum class MainTab : uint8_t { None, Recent, Library, Settings };
 enum class MainTabFocus : uint8_t { Tabs, Content };
 enum class MainTabContentEdge : uint8_t { First, Last };
 
@@ -22,8 +22,7 @@ namespace MainTabs {
 inline constexpr int controlGap = UiHighDpiProfile::enabled ? UiHighDpiProfile::controlGap : 6;
 inline constexpr int statusBarHeight = UiHighDpiProfile::enabled ? UiHighDpiProfile::statusHeight : 28;
 inline constexpr int bottomBarHeight = UiHighDpiProfile::enabled ? UiHighDpiProfile::navigationHeight : 56;
-inline constexpr std::array<MainTab, 5> values = {MainTab::Recent, MainTab::Library, MainTab::Apps, MainTab::Settings,
-                                                  MainTab::Statistics};
+inline constexpr std::array<MainTab, 3> values = {MainTab::Recent, MainTab::Library, MainTab::Settings};
 
 constexpr int indexOf(const MainTab tab) {
   const auto found = std::find(values.begin(), values.end(), tab);

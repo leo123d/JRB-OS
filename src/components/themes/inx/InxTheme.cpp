@@ -73,18 +73,6 @@ const uint8_t* iconForTab(const MainTab tab) {
 #else
       return InxSettingsTabIcon;
 #endif
-    case MainTab::Statistics:
-#ifdef CROSSMUX_UI_PROFILE_HIGH_DPI
-      return icon_tab_statistics_56.bits;
-#else
-      return InxStatisticsTabIcon;
-#endif
-    case MainTab::Apps:
-#ifdef CROSSMUX_UI_PROFILE_HIGH_DPI
-      return icon_tab_apps_56.bits;
-#else
-      return InxAppsTabIcon;
-#endif
     case MainTab::None:
       return nullptr;
   }
