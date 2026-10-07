@@ -68,22 +68,18 @@ add_subdirectory(library_index_file)
 add_subdirectory(library_builder)
 add_subdirectory(minibidi_arabic)
 add_subdirectory(combining_marks)
+# The host tests for the deleted app suite (src/activities/apps, WeRead) were
+# removed together with the apps themselves; see the phase1 "delete apps"
+# commit. Keeping their targets here made `cmake -S test` fail outright.
 add_subdirectory(time_utils)
-add_subdirectory(weread_webapi)
-add_subdirectory(airpage)
-add_subdirectory(chinese_chess)
 add_subdirectory(sd_card_font_cache_format)
-add_subdirectory(pixel_switch)
 add_subdirectory(inx_navigation)
 add_subdirectory(sloppy_digits)
-add_subdirectory(woodfish_store)
 add_subdirectory(book_cover_loader)
-add_subdirectory(calculator)
 add_subdirectory(txt_page_index)
 add_subdirectory(txt_paragraph)
 add_subdirectory(txt_encoding)
 add_subdirectory(txt_chapter_index)
-add_subdirectory(game_ui)
 add_subdirectory(credential_integrity)
 add_subdirectory(footnote_list)
 add_subdirectory(waveshare_function_button)
@@ -118,7 +114,7 @@ add_subdirectory(reader_build_failure)
 add_subdirectory(reader_font_preview)
 
 # Font fallback reuses the existing Unicode mark classification.
-foreach(font_test DifferentialRoundingTest LigatureGuardTest CalculatorFontTest SdCardFontMemoryTest SdCardFontPagedTest)
+foreach(font_test DifferentialRoundingTest LigatureGuardTest SdCardFontMemoryTest SdCardFontPagedTest)
   target_sources(${font_test} PRIVATE
     ${REPO_ROOT}/lib/MiniBidi/minibidi.c
     ${REPO_ROOT}/lib/MiniBidi/BidiUtils.cpp)
@@ -128,8 +124,6 @@ foreach(font_test DifferentialRoundingTest LigatureGuardTest CalculatorFontTest 
 endforeach()
 
 find_package(Python3 REQUIRED COMPONENTS Interpreter)
-add_test(NAME WeReadLogout
-  COMMAND ${Python3_EXECUTABLE} ${REPO_ROOT}/scripts/tests/test_weread_logout.py)
 add_test(NAME BuiltinFontShrink
   COMMAND ${Python3_EXECUTABLE} ${REPO_ROOT}/scripts/tests/test_builtin_font_shrink.py)
 add_test(NAME PioarduinoCache
@@ -207,7 +201,7 @@ add_test(NAME WifiStartupFailure COMMAND ${Python3_EXECUTABLE} ${REPO_ROOT}/scri
 add_test(NAME FontPreloadFlow
   COMMAND ${Python3_EXECUTABLE} ${REPO_ROOT}/test/reader_font_preview/test_preload_flow.py)
 add_test(NAME TlsMemoryPreflight COMMAND ${Python3_EXECUTABLE} ${REPO_ROOT}/scripts/tests/test_tls_memory_preflight.py)
-add_test(NAME AirPageDisplayRetry COMMAND ${Python3_EXECUTABLE} ${REPO_ROOT}/scripts/tests/test_airpage_display_retry.py)
+add_test(NAME ImageBlockMemoryFailure COMMAND ${Python3_EXECUTABLE} ${REPO_ROOT}/scripts/tests/test_image_block_memory_failure.py)
 
 add_test(NAME FontPreloadRefresh COMMAND ${Python3_EXECUTABLE} ${REPO_ROOT}/scripts/tests/test_font_preload_refresh.py)
 add_test(NAME FirmwareUpdateRefresh COMMAND ${Python3_EXECUTABLE} ${REPO_ROOT}/scripts/tests/test_firmware_update_refresh.py)

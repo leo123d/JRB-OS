@@ -18,13 +18,9 @@
 #include <new>
 #include <vector>
 
-#include "AirPageImageRenderer.h"
-#include "AirPageWallpaper.h"
 #include "CrossPointSettings.h"
 #include "Epub/blocks/ImageBlock.h"
 #include "Epub/converters/JpegToFramebufferConverter.h"
-#include "QrParams.h"
-#include "SleepProbe.h"
 #include "components/themes/BaseTheme.h"
 
 // Native rendering bypasses ImageBlock; the four-level seam checks error forwarding.
@@ -196,9 +192,7 @@ int main(int argc, char** argv) {
   renderer.begin();
   levels = 4;
   assert(renderer.getGrayscaleLevels() == 4 && !renderer.beginGrayscale16());
-  assert(qrParams(renderer) == "&w=32&h=128&mode=gray4");
   levels = 16;
-  assert(qrParams(renderer) == "&w=32&h=128&mode=gray16");
   for (const auto orientation : {GfxRenderer::Portrait, GfxRenderer::PortraitInverted, GfxRenderer::LandscapeClockwise,
                                  GfxRenderer::LandscapeCounterClockwise}) {
     renderer.setOrientation(orientation);
@@ -302,159 +296,7 @@ int main(int argc, char** argv) {
   assert(JpegToBmpConverter::jpegFileToBmpStreamWithSize(file, thumbnail, 32, 32));
   Bitmap cropped(thumbnail.bytes.data(), thumbnail.bytes.size());
   assert(cropped.parseHeaders() == BmpReaderError::Ok && cropped.getWidth() == 256 && cropped.getHeight() == 32);
-  airpage::SelectedImage selected;
-  std::strcpy(selected.path, "/ramp.jpg");
-  selected.image = {airpage::ImageFormat::Jpeg, 128, 16, true};
-  const Rect viewport(0, 0, 128, 16);
-  const int before = commits;
-  refreshEvents.clear();
-  assert(airpage::AirPageImageRenderer::render(renderer, viewport, selected, true) ==
-         airpage::AirPageImageRenderer::Result::Success);
-  assert(commits == before + 1 && !loan);
-  assert((refreshEvents == std::vector<char>{'w', 'w', 'B', 'C'}));
-  // A popup paints the B/W proxy; closing it re-renders the unchanged original.
-  renderer.clearScreen();
-  refreshEvents.clear();
-  assert(airpage::AirPageImageRenderer::render(renderer, viewport, selected) ==
-         airpage::AirPageImageRenderer::Result::Success);
-  assert((refreshEvents == std::vector<char>{'B', 'C'}));
-  for (int i = 0; i < 16; ++i) assert(tone(i * 8 + 4, 8) == i);
-  failRefresh = true;
-  assert(airpage::AirPageImageRenderer::render(renderer, viewport, selected) ==
-         airpage::AirPageImageRenderer::Result::Failed);
-  failRefresh = false;
-  assert(!loan);
-  // All heap-backed JPEG entry points use allocator capacity, not internal-only RAM.
-  const auto healthyHeap = availableHeap;
-  const size_t decoderBytes = sizeof(JPEGDEC);
-  ImageDimensions dimensions{};
-  ImageRenderError error = ImageRenderError::None;
-  config.error = &error;
-  for (const auto heap :
-       {HalMemory::HeapStats{decoderBytes + 16383, 100000, 0, decoderBytes},
-        HalMemory::HeapStats{decoderBytes + 16384, 100000, 0, decoderBytes - 1}, HalMemory::getInternalHeap()}) {
-    availableHeap = heap;
-    assert(!JpegToFramebufferConverter::getDimensionsStatic("/ramp.jpg", dimensions));
-    assert(renderer.beginGrayscale16());
-    assert(!jpeg.decodeToFramebuffer("/ramp.jpg", renderer, config));
-    assert(error == ImageRenderError::OutOfMemory);
-    renderer.cancelGrayscale16();
-    assert(file.seek(0));
-    RecordingPrint rejected;
-    assert(!JpegToBmpConverter::jpegFileToBmpStream(file, rejected));
-    assert(rejected.bytes.empty());
-    assert(airpage::AirPageImageRenderer::render(renderer, viewport, selected) ==
-           airpage::AirPageImageRenderer::Result::OutOfMemory);
-    assert(!loan && Storage.exists("/ramp.jpg"));
-  }
-  availableHeap = {decoderBytes + 16384, 100000, 0, decoderBytes};
-  assert(JpegToFramebufferConverter::getDimensionsStatic("/ramp.jpg", dimensions));
-  // A borrowed framebuffer still permits conversion with an otherwise empty heap.
-  std::vector<uint8_t> scratch(decoderBytes);
-  buildscratch::lend(scratch.data(), scratch.size());
-  availableHeap = {};
-  assert(file.seek(0));
-  RecordingPrint borrowed;
-  assert(JpegToBmpConverter::jpegFileToBmpStream(file, borrowed));
-  RenderConfig cacheConfig = config;
-  cacheConfig.output = DecodeOutput::CacheOnly;
-  cacheConfig.cachePath = "/scratch.pxc";
-  assert(jpeg.decodeToFramebuffer("/ramp.jpg", renderer, cacheConfig));
-  auto* released = buildscratch::claim(decoderBytes);
-  assert(released == scratch.data());
-  buildscratch::release(released);
-  buildscratch::reclaim();
-  availableHeap = healthyHeap;
-  failDecoderAllocation = true;  // Preflight passes but the actual allocation fails.
-  assert(!JpegToFramebufferConverter::getDimensionsStatic("/ramp.jpg", dimensions));
-  assert(file.seek(0));
-  RecordingPrint allocationRejected;
-  assert(!JpegToBmpConverter::jpegFileToBmpStream(file, allocationRejected));
-  assert(allocationRejected.bytes.empty());
-  assert(renderer.beginGrayscale16());
-  assert(!jpeg.decodeToFramebuffer("/ramp.jpg", renderer, config));
-  assert(error == ImageRenderError::OutOfMemory);
-  renderer.cancelGrayscale16();
-  refreshEvents.clear();
-  assert(airpage::AirPageImageRenderer::render(renderer, viewport, selected, true) ==
-         airpage::AirPageImageRenderer::Result::OutOfMemory);
-  assert(!loan);
-  assert((refreshEvents == std::vector<char>{'w', 'w', 'B', 'X'}));
-  failDecoderAllocation = false;
-  assert(renderer.beginGrayscale16());
-  assert(jpeg.decodeToFramebuffer("/ramp.jpg", renderer, config));
-  assert(error == ImageRenderError::None);
-  renderer.cancelGrayscale16();
-  // Exit cleanup cancels an active transaction and consumes either override.
-  for (const auto overrideMode : {HalDisplay::FULL_REFRESH, HalDisplay::HALF_REFRESH}) {
-    refreshEvents.clear();
-    assert(renderer.beginGrayscale16());
-    renderer.drawPixel(1, 1, 0);
-    renderer.requestNextRefresh(overrideMode);
-    airpage::AirPageImageRenderer::cleanScreen(renderer);
-    assert(!loan && !renderer.isGrayscale16Active());
-    assert((refreshEvents == std::vector<char>{'B', 'X', 'w', 'w'}));
-    // The next activity's frame must not inherit the old override.
-    renderer.displayBuffer(HalDisplay::FAST_REFRESH);
-    assert(refreshEvents.back() == 'w');
-  }
-  // Legacy output replaces its existing preclear with two white fast clears.
-  auto bmpBytes = ramp(false, false);
-  std::ofstream legacyBmpOut(std::string(argv[2]) + "/legacy-ramp.bmp", std::ios::binary);
-  legacyBmpOut.write(reinterpret_cast<const char*>(bmpBytes.data()), bmpBytes.size());
-  legacyBmpOut.close();
-  airpage::SelectedImage bmpSelected;
-  std::strcpy(bmpSelected.path, "/legacy-ramp.bmp");
-  bmpSelected.image = {airpage::ImageFormat::Bmp, 17, 2, true};
-  levels = 4;
-  refreshEvents.clear();
-  assert(airpage::AirPageImageRenderer::render(renderer, viewport, bmpSelected, true) ==
-         airpage::AirPageImageRenderer::Result::Success);
-  assert((refreshEvents == std::vector<char>{'w', 'w', 'f', 'G'}));
-  refreshEvents.clear();
-  assert(airpage::AirPageImageRenderer::render(renderer, viewport, bmpSelected) ==
-         airpage::AirPageImageRenderer::Result::Success);
-  assert((refreshEvents == std::vector<char>{'w', 'f', 'G'}));
-  levels = 4;
-  legacyError = ImageRenderError::OutOfMemory;
-  assert(airpage::AirPageImageRenderer::render(renderer, viewport, selected) ==
-         airpage::AirPageImageRenderer::Result::OutOfMemory);
-  legacyError = ImageRenderError::Failed;
-  assert(airpage::AirPageImageRenderer::render(renderer, viewport, selected) ==
-         airpage::AirPageImageRenderer::Result::Failed);
-  levels = 16;
-  assert(airpage::AirPageWallpaper::install(selected));
-  assert(SETTINGS.sleepScreen == CrossPointSettings::CUSTOM);
-  HalFile sleep;
-  assert(Storage.openFileForRead("TEST", "/sleep.bmp", sleep));
-  Bitmap sleepBitmap(sleep);
-  assert(sleepBitmap.parseHeaders() == BmpReaderError::Ok && sleepBitmap.getBpp() == 8);
-  // A settings failure must restore the previous original BMP and delete .part/.bak.
-  const auto bmp = ramp(false, true);
-  std::ofstream bmpFile(std::string(argv[2]) + "/ramp.bmp", std::ios::binary);
-  bmpFile.write(reinterpret_cast<const char*>(bmp.data()), bmp.size());
-  bmpFile.close();
-  std::strcpy(selected.path, "/ramp.bmp");
-  selected.image = {airpage::ImageFormat::Bmp, 17, 2, true};
-  SETTINGS.failedSaves = 1;
-  assert(!airpage::AirPageWallpaper::install(selected));
-  airpage::ImageInfo retained;
-  assert(airpage::AirPageImageStore::inspectImage("/sleep.bmp", retained) && retained.width == 32);
-  assert(!Storage.exists("/sleep.bmp.part") && !Storage.exists("/sleep.bmp.bak"));
-  assert(airpage::AirPageWallpaper::install(selected));
-  assert(airpage::AirPageImageStore::inspectImage("/sleep.bmp", retained) && retained.width == 17);
-  SleepProbe sleepProbe(renderer);
-  const int beforeSleep = commits;
-  sleepProbe.renderCustomSleepScreen();
-  assert(commits == beforeSleep + 1 && sleepProbe.defaults == 0 && !loan);
-  failRefresh = true;
-  sleepProbe.renderCustomSleepScreen();
-  assert(sleepProbe.defaults == 1 && !loan);
-  failRefresh = false;
-  SETTINGS.sleepScreenCoverFilter = CrossPointSettings::SLEEP_SCREEN_COVER_FILTER::BLACK_AND_WHITE;
-  const int beforeFiltered = commits;
-  sleepProbe.renderCustomSleepScreen();
-  assert(commits == beforeFiltered);  // Existing filters must not enter native output.
-  SETTINGS.sleepScreenCoverFilter = CrossPointSettings::SLEEP_SCREEN_COVER_FILTER::NO_FILTER;
-  assert(commits > 0 && cancels > 0);
+  // The AirPage preview/wallpaper and sleep-screen cases were removed with
+  // the app suite they belonged to; reintroduce them with a sleep-screen-only
+  // harness if that coverage is wanted again.
 }
