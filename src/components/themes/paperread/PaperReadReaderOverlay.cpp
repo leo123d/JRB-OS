@@ -19,9 +19,9 @@ constexpr int kFont16 = NOTOSERIF_12_FONT_ID;  // 16px
 constexpr int kFont15 = NOTOSERIF_12_FONT_ID;  // 15px
 
 // O-1 geometry.
-constexpr int kToolbarTopBand = PaperReadUi::kHeaderTop;      // y5
-constexpr int kToolbarTopHeight = PaperReadUi::kHeaderHeight; // 96 -> y101
-constexpr int kToolbarBottomTop = 1115;                       // spec O-1
+constexpr int kToolbarTopBand = PaperReadUi::kHeaderTop;          // y5
+constexpr int kToolbarTopHeight = PaperReadUi::kHeaderHeight;     // 96 -> y101
+constexpr int kToolbarBottomTop = 1115;                           // spec O-1
 constexpr int kToolbarBottomBottom = PaperReadUi::kTabBarBottom;  // 1208
 constexpr int kToolbarItems = 4;
 
@@ -175,7 +175,7 @@ void render(const GfxRenderer& r, const OverlayModel& m) {
   // ---- O-2 / O-3 / O-4: full-screen white panels ---------------------------
   if (m.panel == Panel::Contents || m.panel == Panel::Progress || m.panel == Panel::Marks) {
     r.fillRect(0, 0, width, r.getScreenHeight(), false);
-    const char* title = m.panel == Panel::Contents ? tr(STR_OVERLAY_CONTENTS)
+    const char* title = m.panel == Panel::Contents   ? tr(STR_OVERLAY_CONTENTS)
                         : m.panel == Panel::Progress ? tr(STR_OVERLAY_PROGRESS)
                                                      : tr(STR_OVERLAY_MARKS);
     drawPanelHeader(r, title);

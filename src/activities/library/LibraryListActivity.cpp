@@ -1235,7 +1235,8 @@ bool LibraryListActivity::renderPaperReadLibrary() {
     renderer.drawText(NOTOSERIF_12_FONT_ID, (PaperReadUi::kScreenWidth - pw) / 2, textY, pageLabel, true);
     const char* next = tr(STR_NEXT_PAGE_LABEL);
     const int nw = renderer.getTextWidth(NOTOSERIF_14_FONT_ID, next);
-    renderer.drawText(NOTOSERIF_14_FONT_ID, PaperReadUi::kScreenWidth - PaperReadUi::kSideMargin - nw, textY, next, true);
+    renderer.drawText(NOTOSERIF_14_FONT_ID, PaperReadUi::kScreenWidth - PaperReadUi::kSideMargin - nw, textY, next,
+                      true);
   }
 
   GUI.drawMainTabBar(renderer, mainTabLayout().tabBar, MainTab::Library);
@@ -1295,8 +1296,7 @@ void LibraryListActivity::handlePaperReadInput() {
     for (int slot = 0; slot < kCellsPerPage; ++slot) {
       const int cx = PaperReadUi::gridCellX(slot);
       const int cy = PaperReadUi::gridCellY(slot);
-      if (x >= cx && x < cx + PaperReadUi::kGridCardWidth && y >= cy &&
-          y < cy + PaperReadUi::kGridCardHeight + 50) {
+      if (x >= cx && x < cx + PaperReadUi::kGridCardWidth && y >= cy && y < cy + PaperReadUi::kGridCardHeight + 50) {
         paperreadCursor = slot;
         const int target = paperreadPage * kCellsPerPage + slot;
         // Walk the same filtered sequence to find the original entry.

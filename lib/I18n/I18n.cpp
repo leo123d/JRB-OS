@@ -6,7 +6,6 @@
 // Relative include: the I18n lib does not declare Logging as a dependency, so
 // <Logging.h> is not on this translation unit's include path.
 #include "../Logging/Logging.h"
-
 #include "I18nStrings.h"
 
 using namespace i18n_strings;

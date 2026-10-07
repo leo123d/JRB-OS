@@ -24,13 +24,13 @@ enum class Panel : uint8_t { None, Toolbar, Contents, Progress, Marks, Text };
 
 struct OverlayModel {
   Panel panel = Panel::None;
-  const char* bookTitle = "";    // O-1 top band, line 1
-  const char* chapterTitle = ""; // O-1 top band, line 2 / O-2 headings
-  const char* pageInfo = "";     // e.g. "12 / 300"
-  int pageNumber = 1;            // O-3 jump target / O-4 "页 N"
-  int pageCount = 1;             // O-3 denominator
-  int percent = 0;               // 0..100
-  const char* chapterLabel = ""; // O-3 subtitle
+  const char* bookTitle = "";     // O-1 top band, line 1
+  const char* chapterTitle = "";  // O-1 top band, line 2 / O-2 headings
+  const char* pageInfo = "";      // e.g. "12 / 300"
+  int pageNumber = 1;             // O-3 jump target / O-4 "页 N"
+  int pageCount = 1;              // O-3 denominator
+  int percent = 0;                // 0..100
+  const char* chapterLabel = "";  // O-3 subtitle
 
   // O-2 contents rows.
   int tocCount = 0;
@@ -41,9 +41,9 @@ struct OverlayModel {
 
   // O-4 marks rows.
   struct MarkRow {
-    const char* label;  // "书签" / "划线"
-    const char* detail; // chapter or excerpt
-    const char* page;   // "页 N"
+    const char* label;   // "书签" / "划线"
+    const char* detail;  // chapter or excerpt
+    const char* page;    // "页 N"
     bool bookmark;
   };
   int markCount = 0;
@@ -69,9 +69,9 @@ void drawMask(const GfxRenderer& renderer, int top, int bottom);
 // Hit-testing for touch, mirroring the spec's interaction table.
 // Returns true when the point was consumed.
 struct ToolbarHit {
-  int topItem;    // -1 none, 0..3 = 目录/进度/标记/字体
-  bool back;      // top-band back arrow
-  bool outside;   // tap outside the bands (mask area) -> collapse
+  int topItem;   // -1 none, 0..3 = 目录/进度/标记/字体
+  bool back;     // top-band back arrow
+  bool outside;  // tap outside the bands (mask area) -> collapse
 };
 ToolbarHit hitToolbar(int x, int y, int screenWidth);
 

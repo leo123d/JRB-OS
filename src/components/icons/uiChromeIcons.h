@@ -112,7 +112,6 @@ inline constexpr uint8_t icon_settings_56_bits[] = {
 };
 static const freeink::Icon icon_settings_56 = {56, 56, 27, icon_settings_56_bits};
 
-
 // lucide: settings-2; 32px; legacy CCW layout
 static const uint8_t icon_settings_2_32_bits[] = {
     0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xF8,

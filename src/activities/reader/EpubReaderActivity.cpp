@@ -415,7 +415,6 @@ bool EpubReaderActivity::loadBook() {
     }
   }
 
-
   READING_STATS.beginSession(
       epub->getPath(), epub->getTitle(), epub->getAuthor(), epub->getCoverBmpPath(),
       clampPercent(static_cast<int>(epub->calculateProgress(currentSpineIndex, 0.0f) * 100.0f + 0.5f)),

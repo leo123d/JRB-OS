@@ -31,7 +31,7 @@ class PaperReadUi {
   static constexpr int kHeaderHeight = 96;      // -> y101
   static constexpr int kHeaderBackX = 26;       // back glyph left edge
   static constexpr int kHeaderBackSize = 26;
-  static constexpr int kHeaderTitleX = 76;      // title left edge
+  static constexpr int kHeaderTitleX = 76;  // title left edge
 
   // Persistent bottom bar (spec S-1.9): y1112-1208.
   static constexpr int kTabBarTop = 1112;

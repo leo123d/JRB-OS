@@ -165,7 +165,8 @@ class LibraryListActivity final : public UiTabListActivity {
   // fallback when a tap misses a card.
   int paperreadCursor = 0;
 #endif
-  int activeTabIndex = 0;  library::SortOrder sortOrder = library::SortOrder::RecentDesc;
+  int activeTabIndex = 0;
+  library::SortOrder sortOrder = library::SortOrder::RecentDesc;
   // One bit per tab; Recent starts descending (newest first).
   uint8_t descendingTabs = 1u << 0;
   // Set when the walk finished but the sort did not, so the screen can say the

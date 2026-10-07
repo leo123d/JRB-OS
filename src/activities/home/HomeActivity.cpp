@@ -333,7 +333,6 @@ void HomeActivity::loadRecentCovers(int coverHeight) {
 void HomeActivity::onEnter() {
   Activity::onEnter();
 
-
   const auto& metrics = UITheme::getInstance().getMetrics();
   if (UITheme::getInstance().hasCoverGridHome()) {
     // Screen-lifetime interaction tables and component properties exceed the stack budget.
@@ -351,8 +350,7 @@ void HomeActivity::onEnter() {
   const auto base = static_cast<int>(recentBooks.size());
   const bool isCarousel =
       static_cast<CrossPointSettings::UI_THEME>(SETTINGS.uiTheme) == CrossPointSettings::UI_THEME::LYRA_CAROUSEL;
-  selectorIndex =
-      initialMenuItem == HomeMenuItem::NONE ? 0 : base + menuItemToIndex(initialMenuItem, isCarousel);
+  selectorIndex = initialMenuItem == HomeMenuItem::NONE ? 0 : base + menuItemToIndex(initialMenuItem, isCarousel);
   lastCarouselBookIndex = 0;
 
   // Trigger first update
@@ -675,15 +673,15 @@ void HomeActivity::loop() {
 // ---------------------------------------------------------------------------
 namespace paperread_home {
 // Spec S-1 constants (px, screen-absolute; panel is 684x1216 portrait).
-constexpr int kSideMargin = 32;         // S-1.1 / S-1.3 / S-1.4
+constexpr int kSideMargin = 32;  // S-1.1 / S-1.3 / S-1.4
 constexpr int kMastheadTop = 5;
-constexpr int kMastheadHeight = 64;     // y5-69
+constexpr int kMastheadHeight = 64;  // y5-69
 constexpr int kHeroTop = 97;
 constexpr int kHeroCoverWidth = 200;
 constexpr int kHeroCoverHeight = 283;
 constexpr int kHeroGap = 32;
 constexpr int kButtonTop = 430;
-constexpr int kButtonHeight = 96;       // y430-526
+constexpr int kButtonHeight = 96;  // y430-526
 constexpr int kDividerY = 566;
 constexpr int kRecentLabelY = 590;
 constexpr int kCardRowY = 630;
@@ -692,7 +690,7 @@ constexpr int kCardCoverHeight = 212;
 constexpr int kStatsDividerY = 924;
 constexpr int kStatLine1Y = 966;
 constexpr int kStatLine2Y = 998;
-constexpr int kTabBarTop = 1112;        // reserved; chrome draws into it
+constexpr int kTabBarTop = 1112;  // reserved; chrome draws into it
 
 // Home body palette: only ink + the 4-step grey (spec R-3).
 constexpr freeink::ui::Color kInk = freeink::ui::Color::Black;
@@ -721,8 +719,9 @@ void HomeActivity::render(RenderLock&&) {
   } else if (!recentsLoaded && !recentsLoading) {
     recentsLoading = true;
     const int themeThumbHeight = GUI.homeCoverThumbHeight(renderer);
-    loadRecentCovers(themeThumbHeight > 0 ? themeThumbHeight : std::max(paperread_home::kHeroCoverHeight,
-                                                                        paperread_home::kCardCoverHeight));
+    loadRecentCovers(themeThumbHeight > 0
+                         ? themeThumbHeight
+                         : std::max(paperread_home::kHeroCoverHeight, paperread_home::kCardCoverHeight));
   }
   renderer.clearScreen();
   renderPaperReadHome();
@@ -883,11 +882,10 @@ void HomeActivity::renderPaperReadHome() {
   // bar on readpico so no second battery is painted over this band.
   const int batteryH = InxMetrics::values.batteryHeight;
   const int batteryY = kMastheadTop + (kMastheadHeight > batteryH ? (kMastheadHeight - batteryH) / 2 : 0);
-  GUI.drawBatteryRight(
-      renderer,
-      Rect{pageWidth - kSideMargin - InxMetrics::values.batteryWidth, batteryY,
-           InxMetrics::values.batteryWidth, batteryH},
-      SETTINGS.hideBatteryPercentage != CrossPointSettings::HIDE_BATTERY_PERCENTAGE::HIDE_ALWAYS);
+  GUI.drawBatteryRight(renderer,
+                       Rect{pageWidth - kSideMargin - InxMetrics::values.batteryWidth, batteryY,
+                            InxMetrics::values.batteryWidth, batteryH},
+                       SETTINGS.hideBatteryPercentage != CrossPointSettings::HIDE_BATTERY_PERCENTAGE::HIDE_ALWAYS);
   renderer.drawLine(kSideMargin, kMastheadTop + kMastheadHeight, pageWidth - kSideMargin - 1,
                     kMastheadTop + kMastheadHeight, false);
 
@@ -906,8 +904,8 @@ void HomeActivity::renderPaperReadHome() {
   const int textWidth = pageWidth - kSideMargin - textX;
   const int heroTextY = kHeroTop + 10;  // right column padding-top 10
   if (hero) {
-    const std::string title = renderer.truncatedText(NOTOSERIF_18_FONT_ID, hero->title.c_str(), textWidth,
-                                                     EpdFontFamily::BOLD);
+    const std::string title =
+        renderer.truncatedText(NOTOSERIF_18_FONT_ID, hero->title.c_str(), textWidth, EpdFontFamily::BOLD);
     renderer.drawText(NOTOSERIF_18_FONT_ID, textX, heroTextY, title.c_str(), true, EpdFontFamily::BOLD);
     if (!hero->author.empty()) {
       // mt12 (12px ~ 9pt) below the title.
@@ -964,8 +962,7 @@ void HomeActivity::renderPaperReadHome() {
       if (stats && stats->completed) {
         renderer.drawText(SMALL_FONT_ID, cardX, kCardRowY + kCardCoverHeight + 36, tr(STR_BOOKS_FINISHED));
       } else {
-        paperreadDots(renderer, cardX, kCardRowY + kCardCoverHeight + 44,
-                      stats ? stats->lastProgressPercent : 0, 8);
+        paperreadDots(renderer, cardX, kCardRowY + kCardCoverHeight + 44, stats ? stats->lastProgressPercent : 0, 8);
       }
     }
   }
@@ -982,15 +979,13 @@ void HomeActivity::renderPaperReadHome() {
   // Average session = total reading time / total recorded sessions.
   uint64_t totalSessions = 0;
   for (const ReadingBookStats& b : READING_STATS.getBooks()) totalSessions += b.sessions;
-  const unsigned avgMinutes =
-      totalSessions > 0 ? static_cast<unsigned>(totalMinutes / totalSessions) : 0;
+  const unsigned avgMinutes = totalSessions > 0 ? static_cast<unsigned>(totalMinutes / totalSessions) : 0;
   char seg[48];
   char line2[160];
   line2[0] = '\0';
   snprintf(seg, sizeof(seg), tr(STR_STATS_READ_FMT), static_cast<unsigned>(READING_STATS.getBooksStartedCount()));
   snprintf(line2, sizeof(line2), "%s", seg);
-  snprintf(seg, sizeof(seg), tr(STR_STATS_FINISHED_FMT),
-           static_cast<unsigned>(READING_STATS.getBooksFinishedCount()));
+  snprintf(seg, sizeof(seg), tr(STR_STATS_FINISHED_FMT), static_cast<unsigned>(READING_STATS.getBooksFinishedCount()));
   snprintf(line2 + strlen(line2), sizeof(line2) - strlen(line2), " · %s", seg);
   snprintf(seg, sizeof(seg), tr(STR_STATS_AVG_SESSION_FMT), avgMinutes);
   snprintf(line2 + strlen(line2), sizeof(line2) - strlen(line2), " · %s", seg);
@@ -1024,8 +1019,8 @@ void HomeActivity::drawPaperReadCover(const RecentBook& book, const Rect& rect, 
     HalFile file;
     if (Storage.openFileForRead("HOME", coverPath, file)) {
       Bitmap bitmap(file);
-      if (bitmap.parseHeaders() == BmpReaderError::Ok && renderer.drawBitmapCropToFill(bitmap, rect.x, rect.y,
-                                                                                       rect.width, rect.height)) {
+      if (bitmap.parseHeaders() == BmpReaderError::Ok &&
+          renderer.drawBitmapCropToFill(bitmap, rect.x, rect.y, rect.width, rect.height)) {
         renderer.drawRect(rect.x, rect.y, rect.width, rect.height, true);
         return;
       }
@@ -1046,8 +1041,8 @@ void HomeActivity::drawPaperReadCover(const RecentBook& book, const Rect& rect, 
   const int maxSpineRun = std::max(8, rect.height - kSpineInset * 2);
   const std::string spine = renderer.truncatedText(fontId, title.c_str(), maxSpineRun);
   const int spineRun = renderer.getTextWidth(fontId, spine.c_str());
-  renderer.drawTextRotated90CW(fontId, rect.x + rect.width / 2 + fontPt / 2,
-                               rect.y + rect.height / 2 + spineRun / 2, spine.c_str());
+  renderer.drawTextRotated90CW(fontId, rect.x + rect.width / 2 + fontPt / 2, rect.y + rect.height / 2 + spineRun / 2,
+                               spine.c_str());
 }
 #endif  // FREEINK_DEVICE_READPICO
 
@@ -1060,4 +1055,3 @@ void HomeActivity::onRecentsOpen() { activityManager.goToRecentBooks(); }
 void HomeActivity::onLibraryOpen() { activityManager.goToLibrary(); }
 
 void HomeActivity::onSettingsOpen() { activityManager.goToSettings(); }
-

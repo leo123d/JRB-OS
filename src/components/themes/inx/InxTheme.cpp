@@ -477,8 +477,8 @@ void InxTheme::drawMainTabBar(const GfxRenderer& renderer, const Rect rect, cons
   const int innerHeight = std::max(0, innerBottom - innerTop);
   const int stackHeight = iconSize + kTabStackGap + labelInkHeight;
   const int stackTop = innerTop + std::max(0, (innerHeight - stackHeight) / 2);
-  const int labelY = std::min(stackTop + iconSize + kTabStackGap - labelInkTop,
-                              innerBottom - labelInkHeight - labelInkTop);
+  const int labelY =
+      std::min(stackTop + iconSize + kTabStackGap - labelInkTop, innerBottom - labelInkHeight - labelInkTop);
 
   for (int index = 0; index < count; ++index) {
     const MainTab tab = MainTabs::values[index];

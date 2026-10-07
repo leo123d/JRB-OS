@@ -800,13 +800,13 @@ void SettingsActivity::toggleCurrentSetting() {
           LOG_ERR("SETTINGS", "OOM: ClockSettingsActivity");
         }
         break;
-case SettingAction::KOReaderSync:
+      case SettingAction::KOReaderSync:
         // PaperRead: removed with the network stack.
         break;
-case SettingAction::OPDSBrowser:
+      case SettingAction::OPDSBrowser:
         // PaperRead: removed with the network stack.
         break;
-case SettingAction::Network:
+      case SettingAction::Network:
         // PaperRead: removed with the network stack.
         break;
       case SettingAction::ClearCache:
@@ -821,10 +821,10 @@ case SettingAction::Network:
       case SettingAction::SdFirmwareUpdate:
         startActivityForResultWith<SdFirmwareUpdateActivity>(resultHandler);
         break;
-case SettingAction::DownloadFonts:
+      case SettingAction::DownloadFonts:
         // PaperRead: removed with the network stack.
         break;
-case SettingAction::ManageDictionaries:
+      case SettingAction::ManageDictionaries:
         // PaperRead: removed with the network stack.
         break;
       case SettingAction::TextSettings:
@@ -855,7 +855,7 @@ case SettingAction::ManageDictionaries:
         else
           startActivityForResultWith<AboutActivity>(resultHandler);
         break;
-case SettingAction::Plugins:
+      case SettingAction::Plugins:
         // PaperRead: removed with the network stack.
         break;
       case SettingAction::KeyboardLayouts:
@@ -1213,8 +1213,7 @@ bool SettingsActivity::renderPaperReadSettings() {
   section(tr(STR_SEC_READING));
   std::snprintf(valueBuffer, sizeof(valueBuffer), "%u pt", static_cast<unsigned>(SETTINGS.fontPointSize));
   row(tr(STR_FONT_SIZE), valueBuffer);
-  row(tr(STR_FONT_FAMILY),
-      SETTINGS.sdFontFamilyName[0] == '\0' ? tr(STR_FOLLOW_SETTINGS) : SETTINGS.sdFontFamilyName);
+  row(tr(STR_FONT_FAMILY), SETTINGS.sdFontFamilyName[0] == '\0' ? tr(STR_FOLLOW_SETTINGS) : SETTINGS.sdFontFamilyName);
   {
     const uint8_t ls = SETTINGS.lineSpacing;
     const float mult = ls == 0 ? 1.2f : (ls == 1 ? 1.6f : 2.0f);

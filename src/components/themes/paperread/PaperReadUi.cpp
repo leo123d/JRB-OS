@@ -73,8 +73,8 @@ int PaperReadUi::chipWidth(const GfxRenderer& renderer, const char* label) {
   return textWidth + kChipPadX * 2;
 }
 
-void PaperReadUi::drawChip(const GfxRenderer& renderer, const int x, const int y, const int height,
-                           const char* label, const bool active) {
+void PaperReadUi::drawChip(const GfxRenderer& renderer, const int x, const int y, const int height, const char* label,
+                           const bool active) {
   const int width = chipWidth(renderer, label);
   if (active) {
     renderer.fillRect(x, y, width, height, true);

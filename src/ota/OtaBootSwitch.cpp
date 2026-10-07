@@ -1,5 +1,6 @@
 
 #include "OtaBootSwitch.h"
+
 #include <Logging.h>
 #include <esp_rom_crc.h>
 #include <spi_flash_mmap.h>
