@@ -181,10 +181,8 @@ TEST(TimeUtils, CityAndDstPolicyUnifyClockCalendarAndAnalytics) {
     EXPECT_STREQ(time, test.hour == 23 ? "23:15" : "22:15");
     ASSERT_TRUE(TimeUtils::formatCurrentDateTime(dateTime, sizeof(dateTime), true));
     EXPECT_EQ(std::string(dateTime), date + (test.hour == 23 ? " 11:15 PM" : " 10:15 PM"));
-    unsigned hour = 0, minute = 0;
-    standby_time::getNowHHMM(0, hour, minute);
-    EXPECT_EQ(hour, test.hour);
-    EXPECT_EQ(minute, 15);
+    // The standby clock helper (standby_time::getNowHHMM) lived in the deleted
+    // app suite; TimeUtils::getLocalDateTime above covers the same conversion.
     uint32_t epoch = 0;
     ASSERT_TRUE(TimeUtils::localDateTimeToUtcEpoch(2025, test.month, 1, test.hour, 15, epoch));
     EXPECT_EQ(epoch, halClock.now);
