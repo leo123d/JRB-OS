@@ -189,7 +189,8 @@ add_test(NAME FileBrowserImages
 
 add_test(NAME ArduinoBootstrapLto COMMAND ${Python3_EXECUTABLE} -m unittest discover -s ${REPO_ROOT}/scripts/tests -p test_pioarduino_cache.py)
 add_subdirectory(reader_session)
-add_subdirectory(plugin_manifest_classification)
+# plugin_manifest_classification was removed with the plugin system: its only
+# subject was src/util/PluginLocations.h, which went away with the plugins.
 add_subdirectory(protected_paths)
 
 find_package(Python3 REQUIRED COMPONENTS Interpreter)
