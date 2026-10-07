@@ -1,4 +1,7 @@
 [submodule "freeink-sdk"]
 	path = freeink-sdk
-	url = https://github.com/0x1abin/freeink-sdk.git
+	# JRB OS: forked from 0x1abin/freeink-sdk to carry the SDCardManager
+	# filename-buffer fix (128 -> 512 bytes) and the board-config state the
+	# readpico build already depended on. Upstream: 0x1abin/freeink-sdk
+	url = https://github.com/leo123d/freeink-sdk.git
 	branch = main
