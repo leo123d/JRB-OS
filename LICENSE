@@ -5,6 +5,12 @@ Copyright (c) 2026 FreeInk
 Copyright (c) 2026 EEGO A4 Template Firmware contributors
 Copyright (c) 2025 CrossPoint Reader organization
 
+JRB OS (Just Read Book) is a derivative work of CrossMux
+(https://github.com/0x1abin/crossmux), itself a fork of CrossPoint Reader.
+The upstream copyright notices above are retained as required.
+Modifications for JRB OS:
+Copyright (c) 2026 JRB OS contributors
+
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
 in the Software without restriction, including without limitation the rights

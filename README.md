@@ -1,146 +1,159 @@
-# CrossMux
+# JRB OS
 
-**English** | [简体中文](./README.zh-CN.md)
+**Just Read Book** — 一个只为「读书」而存在的墨水屏固件。
 
-**CrossMux** is a community fork of [CrossPoint Reader](https://github.com/crosspoint-reader/crosspoint-reader) for ESP32 e-ink devices. Reading comes first, with lightweight apps, reading analytics, standby faces, and on-demand services alongside the reader.
+运行在 **小纸 Read Pico**（MindReset RDP-G01-W，ESP32-S3-N16R8，4.7″ 684×1216 16 级灰度墨水屏）上。
 
-[Releases](https://github.com/0x1abin/crossmux/releases) · [User guide](./USER_GUIDE.md) · [Contributing](./docs/contributing/README.md)
+---
 
-![CrossMux running on an Xteink device](./docs/images/cover.jpg)
+## 这是什么
 
-## Features
+JRB OS 把一台通用墨水屏设备**削成一台纯粹的书**。
 
-- **Reading and library**: EPUB, TXT, XTC/XTCH and images; chapter navigation, bookmarks, dictionaries, custom fonts, reading backgrounds, and KOReader progress sync.
-- **Wireless workflows**: browser file transfer and settings, Calibre wireless, OPDS downloads, WebDAV, and device OTA updates.
-- **Apps**: lightweight games and tools including Sudoku, Gomoku, Chinese Chess, Minesweeper, 2048, Electronic Woodfish, and Ugly Avatar. [Apps guide](./src/activities/apps/README.md).
-- **AirPage**: scan to upload content, then display BMP/JPEG images with manual refresh or foreground live delivery; images can become a sleep screen. [Usage and network behavior](./src/activities/apps/README.md#airpage).
-- **WeRead**: QR login, bookshelf browsing, EPUB downloads for offline reading, and progress sync. Available in the China content profile. [WeRead guide (Chinese)](./src/activities/apps/weread/README.md).
-- **Reading analytics and standby**: reading statistics, heatmaps, profiles and achievements; clock and Chinese almanac faces. [Analytics guide](./src/activities/apps/reading-stats/README.md).
-- **Languages and development**: 33 UI languages in one firmware per hardware target, plus desktop simulators for UI development.
+没有游戏、没有应用商店、没有微信读书、没有 WiFi、没有浏览器、没有统计排行、没有时钟。
+开机就是书，翻页就是全部。
 
-> **WeRead security:** this unofficial Web protocol may change. Device traffic is encrypted, but its client does not verify the server certificate or hostname; use it only on a trusted network. The native simulator verifies certificates through the host trust store. See the [transport details](./docs/engineering/chinese-build.md#weread-transport).
+### 目标
 
-## Devices and release channels
-
-| Device | Chip | Published channels |
+| 项 | 目标 | 当前 |
 |---|---|---|
-| Xteink X3 / X4 (shared image) | ESP32-C3 | Stable, Nightly |
-| [Seeed Sticky](https://www.seeedstudio.com/sticky/?utm_source=partner&utm_medium=crossmux&utm_campaign=readme) | ESP32-S3 | Nightly |
-| Xteink X4 Pro | ESP32-S3 | Nightly |
-| M5Stack Paper Mono | ESP32-S3 | Nightly |
-| eego A4 | ESP32-S3 | Nightly |
-| Murphy M4 | ESP32-S3 | Nightly |
-| Waveshare ePaper 3.97 | ESP32-S3 | Nightly |
-| [Metalio E-Ink 4](./docs/engineering/metalio-eink4.md) | ESP32-S3 | Nightly |
-| [Read Pico (小纸 Pico)](./docs/engineering/read-pico.md) | ESP32-S3 | Nightly |
+| 固件体积 | ≤ 3,349,499 B（腾出空间内嵌中文字库） | **4,683,504 B** |
+| 中文字库 | GB2312 一二级 6763 字，内嵌 20pt / 14pt / 12pt 三档 | 待做（暂用 SD 卡字库） |
+| 界面语言 | 中文 + 英文 | ✅ 已达成 |
+| 首页入口 | 3 项（最近阅读 / 书库 / 设置） | 进行中 |
+| 联网能力 | 完全移除 | ✅ 已达成 |
 
-This table describes configured release targets, not a claim that every feature has passed hardware acceptance. Each S3 target needs its own image. X4 Classic has a build-only target and is absent from public release/OTA indexes. See [device variants](./docs/engineering/device-variants.md) for target-specific limitations.
+### 已完成
 
-Use [Stable](https://github.com/0x1abin/crossmux/releases/tag/stable) for the stable X3/X4 channel, or [Nightly](https://github.com/0x1abin/crossmux/releases/tag/nightly) for development builds. The [target table](./scripts/nightly_targets.py) defines channels and artifact names; [release architecture](./docs/engineering/firmware-release.md) explains packaging and OTA. Current source version and build environments live in [platformio.ini](./platformio.ini).
+- ✅ **删除全部游戏** — 2048、五子棋、中国象棋、扫雷、推箱子、数独、木鱼、像素开关、计算器
+- ✅ **删除 AirPage 相册、丑头像、Buddy、待机屏**
+- ✅ **删除微信读书**（含阅读页的进度同步、书架提升、初始进度）
+- ✅ **删除整个网络栈** — WiFi、Web 服务器、OPDS、Calibre、WebDAV、KOReader 同步、插件系统、联网 OTA
+- ✅ **界面语言 33 种 → 中文 + 英文**
+- ✅ **OTA 改为 SD 卡本地刷写**（不再需要联网）
+- ✅ **保留 EPUB 内容保护解密**（本地 DRM，不依赖网络）
 
-## Install firmware
+**体积进展**
 
-1. Open [CrossMux Releases](https://github.com/0x1abin/crossmux/releases), choose the channel and exact device, and follow that release's asset links and installation notes. X3/X4 share an image; S3 images are board-specific.
-2. Back up your SD card data before changing firmware. Use the matching installation package; an application-only `firmware.bin` is not a complete first-install image.
-3. For an existing X3/X4 installation, the [upstream CrossPoint web flasher](https://crosspointreader.com/#flash-tools) offers a custom binary upload: select X3/X4 and upload the **CrossMux** application binary. Choosing an upstream release installs CrossPoint instead.
-4. For S3 installation and recovery, follow the matching [device documentation](./docs/engineering/device-variants.md) and release instructions. Do not reuse X3/X4 flash commands or offsets for another board.
-
-To build and flash X3/X4 from source, use the [development commands](#development-quick-start) below. For an existing CrossMux installation, device OTA selects the model, content profile, and channel; S3 targets have no Stable channel.
-
-Metalio E-Ink 4 uses the `metalio-eink4` Nightly package and model/board tag `metalio_eink4`. Both language entries point to the same multilingual firmware. Follow the [Metalio guide](./docs/engineering/metalio-eink4.md) for first installation, wiring, and hardware validation status. The [global Web tool](https://crossmux.com) and [China Web tool](https://crossmux.cn) show its install option once Web support is deployed and a matching Nightly package is present in the release catalog.
-
-### USB-locked Xteink devices
-
-Some devices may restrict USB flashing. The [upstream Xteink Unlocker](https://crosspointreader.com/#unlock-tool) is a separate tool; consult its current compatibility and recovery instructions before use. CrossMux compatibility with a locked device must not be inferred from CrossPoint compatibility. Flashing unsupported firmware may leave the device without a recovery path. If the serial device is missing, also check the data cable, port, and browser permissions.
-
-## Chinese fonts and content profiles
-
-Every hardware target builds one language-unified firmware. Simplified Chinese selects the China content profile (`crossmux.cn`); other UI languages select Global (`crossmux.com`). Changing the UI language updates the profile and regional apps, including WeRead and Chinese Chess.
-
-The UI includes compact 8/10/12pt Simplified-Chinese fallback fonts. Built-in reader font choices share a 12pt offline fallback; complete families, other sizes, style variants, and broader Unicode coverage use SD-card `.cpfont` files. Embedded fonts are a subset, so rare or Traditional Chinese characters may require an appropriate SD font.
-
-Download fonts from **Settings > Reader > Manage Fonts**, or copy converted fonts to the SD card. See [SD-card fonts](./docs/sd-card-fonts.md) for installation and conversion, and [Chinese support](./docs/engineering/chinese-build.md) for the embedded-font toolchain. Normal builds need no font regeneration.
-
-## Development quick start
-
-Install PlatformIO Core (`pio`) and Python 3; the repository pins its pioarduino platform. Full code checks also need clang-format 21+, CMake, and Ninja. See [Getting Started](./docs/contributing/getting-started.md) for setup.
-
-```bash
-git clone --recursive https://github.com/0x1abin/crossmux.git
-cd crossmux
-
-# If submodules were not initialized:
-git submodule update --init --recursive
-
-# X3/X4 development build
-pio run -e default
-
-# X3/X4 unified-language stable build
-pio run -e gh_release
-
-# Build and flash that image to a connected X3/X4
-pio run -e gh_release -t upload
+```
+上游 CrossMux readpico   6,307,184 B   余量  241 KB  ❌ 低于 512 KiB 门槛
+JRB OS                    4,683,504 B   余量 1,869 KB ✅
+                         −1,623,680 B  (−1.55 MB, −26%)
 ```
 
-The application binary is `.pio/build/gh_release/firmware.bin`. For other boards, use the matching environment in [build-system.md](./docs/engineering/build-system.md).
+### 待做
 
-For Metalio E-Ink 4:
+- ⬜ 内嵌 GB2312 中文字库（20pt / 14pt / 12pt，压缩后约 2.68 MB）
+- ⬜ 首页收敛为 3 项
+- ⬜ 修复中文文件名乱码（`寻迹.epub` → `瀵昏抗`）
+- ⬜ 修复 CSS 因内存不足被静默跳过
+- ⬜ 修复横屏页脚裁切
+- ⬜ 阅读页 UI 重写（零装饰 + 4 键工具栏）
+- ⬜ 段落级划线批注
+- ⬜ 抬腕唤醒（SC7A20H 加速度计）
+- ⬜ 数据目录迁移 `.crosspoint/` → `.jrbos/`
+
+---
+
+## 硬件的真实瓶颈
+
+不是 Flash，是**内存**。
+
+| 资源 | 容量 |
+|---|---|
+| Flash | 16 MiB（A/B 双槽，每槽 6,553,600 B） |
+| PSRAM | 8 MiB（octal） |
+| **SRAM** | **512 KB，其中可用内部堆只有 ~30–45 KB** |
+
+全刷一页 684×1216 的 16 级灰度图就是 684×1216÷2 ≈ **416 KB** —— 所以排版、CSS 解析、字库缓存全都要挤在那几十 KB 里。这是本项目所有痛苦的根源。
+
+**已知的连带后果**：CSS 解析器需要 65,536 B 连续内存，拿不到就**静默跳过样式**（待修）。
+
+---
+
+## 构建
+
+### 前置（关键，漏了就必然失败）
 
 ```bash
-pio run -e metalio_eink4
-CROSSPOINT_RC_HASH=$(git rev-parse --short=7 HEAD) pio run -e metalio_eink4_nightly
+# 一次性：把 tool-scons 从 pioarduino 平台的 COMMON_IDF_PACKAGES 移除，
+# 否则平台的 stub 会覆盖 PlatformIO 核心正在使用的 SCons。
+python scripts/patch_pioarduino_cache.py --prepare-platform
 ```
 
-The development application is `.pio/build/metalio_eink4/firmware.bin`; first installation also requires the matching bootloader and partition layout described in the [Metalio guide](./docs/engineering/metalio-eink4.md).
+> ⚠️ 上游**只在 CI 里调这个补丁**，本地开发文档里没提。
+> 漏了会得到 `ModuleNotFoundError: No module named 'SCons.Tool.FortranCommon'`，
+> 而且全程编译 0 个文件 —— 报错信息有很强的误导性。
 
-For Read Pico (小纸 Pico):
-
-Until FreeInk SDK PR #35 is merged, first follow the temporary SDK checkout in the [Read Pico guide](./docs/engineering/read-pico.md#current-implementation--2026-09-30).
+### 编译
 
 ```bash
+export PYTHONIOENCODING=utf-8      # 上游 i18n 生成会打印阿拉伯语，Windows 默认 cp936 会卡住
 pio run -e readpico
 ```
 
-On Windows, set `PYTHONIOENCODING=utf-8` before running `pio`, otherwise the build can stall when PlatformIO prints the Arabic i18n language row.
+冷编译约 5 分钟，增量约 1 分钟。
 
-The application is `.pio/build/readpico/firmware.bin`. First installation is a **full-table flash** — `bootloader@0x0`, `partitions@0x8000`, `boot_app0@0xe000`, `app@0x10000` — after a verified full-chip (16 MiB) backup, because the repository partition table and the board's factory `partitions_16M.csv` disagree at `0xE000` and use different app-slot sizes. This target is **build-only in this round**: it is absent from the Nightly/OTA/Web release mappings, and no hardware acceptance has been recorded yet. See the [Read Pico guide](./docs/engineering/read-pico.md) for the pin map, the frozen build flags, and the pending acceptance checklist.
+### 刷写
 
-### Desktop simulator
-
-Install SDL2 and curl (plus OpenSSL development headers on Linux), place EPUBs in `fs_/books/`, then run:
-
-```bash
-pio run -e simulator -t run_simulator           # X4
-pio run -e simulator_x3 -t run_simulator        # X3
-pio run -e simulator_eego_a4 -t run_simulator   # eego A4
-pio run -e simulator_murphy_m4 -t run_simulator # Murphy M4
-pio run -e simulator_readpico -t run_simulator  # Read Pico, 684x1216 portrait
-```
-
-The [CrossMux simulator fork](https://github.com/0x1abin/crosspoint-simulator) is pinned in `platformio.ini`. It previews UI and input flows; it does not validate display waveforms, power consumption, or physical hardware timing.
-
-Read Pico fits its window to the desktop while retaining full-resolution BMP screenshots. Mouse input supports tap, hold and swipe; Up/Escape/Down represent the three capacitive keys, and only Power (`P`) wakes from sleep. Native sixteen-level images and SD UI fonts follow the Read Pico paths. See the [device guide](./docs/engineering/read-pico.md#desktop-simulator) for validation details.
-
-### Checks and debugging
+分区表是**双槽 A/B**（`app0`/`app1` 各 6.25 MiB），与板厂出厂分区表不同，
+所以**首次刷写必须整表刷写**：
 
 ```bash
-./bin/ci-check       # Full code-change checks; does not rewrite sources
-pio device monitor  # Serial logs from a connected device
+esptool.py --chip esp32s3 --port /dev/ttyACM0 --baud 921600 write_flash \
+  0x0      bootloader.bin \
+  0x8000   partitions.bin \
+  0xe000   boot_app0.bin \
+  0x10000  firmware.bin
 ```
 
-Use [Testing and Debugging](./docs/contributing/testing-debugging.md) for focused checks and the enhanced serial monitor. Documentation-only changes need link, command, and whitespace checks rather than firmware builds.
+刷前务必先完整备份 16 MB：
 
-## Documentation and contributing
+```bash
+esptool.py --chip esp32s3 --port /dev/ttyACM0 read_flash 0 0x1000000 backup-full.bin
+```
 
-- [User guide](./USER_GUIDE.md) · [Web transfer](./docs/webserver.md) · [Web API](./docs/webserver-endpoints.md)
-- [Project scope](./SCOPE.md) · [Governance](./GOVERNANCE.md) · [Contributor guide](./docs/contributing/README.md)
-- [Agent instructions](./AGENTS.md) · [Engineering reference](./docs/engineering/index.md) · [Touch and UI](./docs/contributing/touch-and-ui.md)
-- [Cache management](./docs/engineering/cache-management.md) · [File formats](./docs/file-formats.md)
+---
 
-Report bugs and propose changes in [CrossMux Issues](https://github.com/0x1abin/crossmux/issues). Contributions target **`0x1abin/crossmux:main`**; keep each PR focused and describe its verification. Existing CrossPoint class names and the `/.crosspoint` SD data directory remain compatibility details, not instructions to target the upstream repository. That directory also holds settings and progress; do not delete it merely to clear a book cache.
+## 项目由来与许可
 
-## Credits
+**JRB OS 是 [CrossMux](https://github.com/0x1abin/crossmux) 的衍生作品**，而 CrossMux 本身是
+[CrossPoint](https://github.com/crosspoint-reader/crosspoint-reader) 的分支。
+本项目的价值在于**做减法** —— 我们没写阅读引擎，我们把它周围的一切拆掉。
 
-Thanks to [CrossPoint Reader](https://github.com/crosspoint-reader/crosspoint-reader), [Inx](https://github.com/obijuankenobiii/inx), [cpr-vcodex](https://github.com/franssjz/cpr-vcodex), and their contributors, and to [diy-esp32-epub-reader](https://github.com/atomic14/diy-esp32-epub-reader) for the original inspiration.
+上游原始文档见 [README.upstream.md](README.upstream.md)。
 
-CrossMux is not affiliated with Xteink or any device manufacturer. Upstream tools and communities are independent of this fork. See [LICENSE](./LICENSE) for the repository license.
+参考过的其他固件
+
+- [read-pico-reader](https://github.com/wegooo-cell/read-pico-reader) — 同类尝试，但无桌面模拟器、历史极短
+- [RickyOS](https://chinoryunqin.github.io/RickyOS-site/) — 闭源，仅作设计参考
+
+**许可**：MIT。原始版权归 Dave Allie 与 FreeInk（见 [LICENSE](LICENSE)）。
+本项目的修改同样以 MIT 发布。
+
+---
+
+## 目录结构
+
+```
+src/
+  activities/        界面活动（home / reader / library / settings / util）
+  components/        渲染组件与主题
+  ota/               SD 卡本地 OTA（FirmwareFlasher / OtaBootSwitch）
+  util/              工具（EPUB 解析、字典、HTML 转换…）
+lib/
+  Epub/              阅读引擎
+  I18n/              界面文案（仅 EN + ZH_CN）
+freeink-sdk/         上游硬件抽象层（git submodule）
+```
+
+已删除：`src/network/`、`src/activities/network/`、`src/activities/browser/`、
+`src/activities/plugins/`、`lib/WeReadWebApi/`、`src/NetworkStartup.*`、
+`src/WifiCredentialStore.*`、`src/OpdsServerStore.*`
+
+---
+
+## 参与
+
+目前是个人项目，主要目标是把这台设备变成一台真正好用的纯阅读器。
+如果你也在用小纸 Read Pico，欢迎提 Issue 说说什么最影响你读书。
