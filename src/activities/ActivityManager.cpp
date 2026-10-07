@@ -461,7 +461,7 @@ void ActivityManager::goToMainTab(const MainTab tab) {
   mainTabEntryReleasePending = false;
   switch (tab) {
     case MainTab::Home:
-      goHome(HomeMenuItem::LIBRARY);
+      goHome(HomeMenuItem::NONE);
       return;
     case MainTab::Recent:
       goToInxRecent();
@@ -520,9 +520,13 @@ void ActivityManager::goHome(HomeMenuItem initialMenuItem) {
     UserGuide::installIfPending(static_cast<Language>(SETTINGS.language) == Language::ZH_CN);
   }
   if (SETTINGS.uiTheme == CrossPointSettings::UI_THEME::INX) {
+    // PaperRead spec D2/S-1.9: on this theme the persistent bar's Home tab is
+    // the landing tab, so "home" now means HomeActivity (which renders the
+    // PaperRead home), not the recent-books list. The Recent tab routes to
+    // InxRecentActivity separately (see goToMainTab).
     mainTabFocus = MainTabFocus::Tabs;
     mainTabEntryReleasePending = false;
-    goToInxRecent();
+    replaceActivityWith<HomeActivity>(HomeMenuItem::NONE);
     return;
   }
   if (initialMenuItem == HomeMenuItem::NONE && currentActivity) {
